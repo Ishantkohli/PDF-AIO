@@ -1,0 +1,46 @@
+<!--
+Illustrative consent UI only. Integrate into your app's actual consent manager.
+Do not treat this static example as a complete consent implementation.
+Do not load optional scripts before consent where required by law.
+-->
+<section aria-labelledby="privacy-consent-title" class="privacy-consent">
+  <h2 id="privacy-consent-title">Your privacy choices</h2>
+  <p>
+    ADF AIO may use essential storage to keep the app working. With your permission,
+    optional technologies may be used for preferences, analytics, or external embeds.
+    You can accept all optional categories, reject optional categories, or customize
+    your choices. You can change your preferences later.
+  </p>
+
+  <div class="consent-actions">
+    <button type="button" data-consent="accept-all">Accept all</button>
+    <button type="button" data-consent="reject-optional">Reject optional</button>
+    <button type="button" data-consent="customize" aria-haspopup="dialog">
+      Customize
+    </button>
+  </div>
+</section>
+
+<!-- Example form wording: use only if it accurately describes your form. -->
+<form>
+  <!-- Form fields go here. -->
+  <p>
+    Please review the <a href="/privacy-policy">Privacy Policy</a> to understand
+    how information submitted through this form is handled.
+  </p>
+
+  <!-- Do not make this acknowledgement a substitute for a lawful basis. -->
+  <label>
+    <input type="checkbox" name="privacy_acknowledgement" required>
+    I have read the Privacy Policy.
+  </label>
+
+  <!-- Optional marketing consent must remain separate and unchecked by default. -->
+  <label>
+    <input type="checkbox" name="marketing_opt_in">
+    I would like to receive product updates and announcements. I can unsubscribe
+    at any time.
+  </label>
+
+  <button type="submit">Submit</button>
+</form>
