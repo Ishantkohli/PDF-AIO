@@ -2,6 +2,8 @@
 
 <img src="assets/adf-aio-banner.gif" alt="ADF AIO animated neon banner" width="100%">
 
+**NOONE CAN USE MY SOURCE CODE WITHOUT MY PERMS, YOU CAN USE THE APP PROVIDED BUT YOU HAVE NO RIGHTS TO MAKE YOUR OWN APP USING MY SOURCE CODE..**
+
 # ADF AIO
 
 ### All in One. Everything You Need.
@@ -55,9 +57,11 @@ Suggestions and bug reports are welcome. Open an issue to discuss a significant 
 
 Do not commit API keys, passwords, access tokens, private configuration files, or other secrets. Use environment variables for sensitive configuration where applicable.
 
-## 📄 License
 
-No license has been specified yet. Add a license file if you want to clearly define how others may use, modify, and distribute this project.
+
+**NOONE CAN USE MY SOURCE CODE WITHOUT MY PERMS, YOU CAN USE THE APP PROVIDED BUT YOU HAVE NO RIGHTS TO MAKE YOUR OWN APP USING MY SOURCE CODE..**
+
+
 
 ---
 
