@@ -1,6 +1,6 @@
 # Acceptable Use Policy
 
-**Effective date:** [PLACEHOLDER: YYYY-MM-DD]
+**Effective date:** [PLACEHOLDER: 2026-10-20]
 
 This policy applies to use of ADF AIO and supplements the Terms and Conditions.
 

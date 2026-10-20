@@ -1,14 +1,14 @@
 # Terms and Conditions
 
 **ADF AIO**  
-**Effective date:** [PLACEHOLDER: YYYY-MM-DD]  
-**Last updated:** [PLACEHOLDER: YYYY-MM-DD]
+**Effective date:** [PLACEHOLDER: 2026-10-20]  
+**Last updated:** [PLACEHOLDER: 2026-10-20]
 
 These Terms and Conditions (“Terms”) govern your access to and use of ADF AIO (“the App”), operated by Ishant Kohli (separate registered business entity not confirmed) (“we,” “us,” or “our”). By accessing or using the App, you agree to these Terms. If you do not agree, do not use the App.
 
 ## 1. The service
 
-ADF AIO is an all-in-one application that may provide tools, utilities, productivity features, creative resources, and links to third-party services. Features may change, be added, or be discontinued.
+PDF AIO is an all-in-one application that may provide tools, utilities, productivity features, creative resources, and links to third-party services. Features may change, be added, or be discontinued.
 
 ## 2. Eligibility
 
@@ -76,7 +76,7 @@ These Terms are governed by the laws of [PLACEHOLDER: jurisdiction], excluding c
 
 ## 14. Contact
 
-Operator: Ishant Kohli (separate registered business entity not confirmed)  
+Operator: Ishant Kohli 
 Email: ishantkohlikohli@gmail.com  
 Website: https://ishantkohli.me
 

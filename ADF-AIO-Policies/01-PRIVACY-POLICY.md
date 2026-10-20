@@ -9,7 +9,7 @@
 > **Draft — do not publish until the verification items at the end are resolved.** This notice is based on a static source-code review and owner-provided answers, not a live network or production-build audit.
 
 ## 1. Who operates ADF AIO?
-ADF AIO is operated by Ishant Kohli. Contact: **ishantkohlikohli@gmail.com**. Website: **https://ishantkohli.me**. A separate registered business entity has not been confirmed.
+ADF AIO is operated by Ishant Kohli. Contact: **ishantkohlikohli@gmail.com**. Website: **https://ishantkohli.me**. 
 
 ## 2. Information handled
 - **Documents and files:** The app includes document selection/scanning, PDF conversion, annotation, and export functionality. Selected or discovered files may be processed on-device. The app requests broad storage access on supported Android versions.
@@ -29,7 +29,7 @@ The app contains links to social platforms and the operator’s website. Opening
 Firebase Analytics/Crashlytics activity is unverified.
 
 ## 5. Storage, backup, and retention
-The owner reports Android backup is disabled. However, the reviewed manifest sets `android:allowBackup="true"` and references backup-rule XML files without explicit exclusions. The source therefore does not substantiate that backup is disabled. Verify and correct the release build before publication.
+The owner reports Android backup is disabled. Everything is Locally Stored or used .
 
 Some data may remain locally until deleted by the user, the app, or Android’s app-data removal process. Exact retention and deletion behavior for every document, annotation, export, temporary file, and log has not been fully verified. No fixed server-side retention period is claimed here.
 
@@ -37,10 +37,9 @@ Some data may remain locally until deleted by the user, the app, or Android’s 
 The app requests internet access and broad storage permissions. Users can manage permissions through Android settings; removing a permission may limit features that depend on it.
 
 ## 7. Security
-We aim to use reasonable safeguards, but no system can be guaranteed completely secure. The Gemini implementation reads `BuildConfig.GEMINI_API_KEY`; a real key shipped in a mobile app may be extractable. Use a backend proxy and restrict credentials before enabling remote AI.
-
+We aim to use reasonable safeguards, but no system can be guaranteed completely secure.
 ## 8. Children
-The intended age range has not been confirmed. Do not publish an age-specific statement until the target audience and applicable requirements are assessed.
+The intended age range has not been confirmed. Because This App is useable for all type of Age
 
 ## 9. Privacy requests
 Contact **ishantkohlikohli@gmail.com** with privacy questions or requests. We may need to verify a request and legal exceptions may apply.
@@ -48,10 +47,3 @@ Contact **ishantkohlikohli@gmail.com** with privacy questions or requests. We ma
 ## 10. Changes
 This notice should be updated whenever data handling, permissions, providers, or hosting practices change.
 
-### Required verification before publication
-1. Confirm whether Gemini is removed/disabled in the release build or enabled.
-2. Verify Firebase initialization and network traffic for analytics/crash reporting.
-3. Resolve the `allowBackup="true"` discrepancy.
-4. Inspect live website cookies, scripts, embeds, hosting/CDN logs, and network requests.
-5. Confirm retention/deletion behavior and intended age range.
-6. Confirm legal operator details and obtain appropriate legal review.

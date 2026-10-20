@@ -1,6 +1,6 @@
 # ADF AIO Proprietary License — Draft
 
-**Copyright © [PLACEHOLDER: year] [PLACEHOLDER: rights holder]. All rights reserved.**
+**Copyright © [PLACEHOLDER: 2026] [PLACEHOLDER: Ishant Kohli]. All rights reserved.**
 
 This draft is intended for a proprietary application where users may access a pre-built version but are not granted permission to reuse the app's proprietary source code to create their own app. Have a qualified lawyer review it before relying on it.
 
@@ -49,8 +49,8 @@ To the maximum extent permitted by law, the app is provided “as is” and “a
 
 For commercial licensing, source-code permissions, or other written authorization, contact:
 
-[PLACEHOLDER: rights holder]  
-[PLACEHOLDER: licensing email]
+[PLACEHOLDER: Ishant Kohli ]  
+[PLACEHOLDER: ishantkohlikohli@gmail.com ]
 
 ## Important repository note
 

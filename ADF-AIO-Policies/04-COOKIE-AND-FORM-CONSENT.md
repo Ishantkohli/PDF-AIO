@@ -1,6 +1,6 @@
 # Cookie and Form Consent
 
-**Effective date:** [PLACEHOLDER: YYYY-MM-DD]
+**Effective date:** [PLACEHOLDER: 2026-10-20]
 
 This document defines recommended consent language and implementation requirements for ADF AIO. Use only the options that correspond to features actually present in the App.
 
