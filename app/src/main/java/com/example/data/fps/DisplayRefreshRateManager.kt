@@ -167,6 +167,14 @@ object DisplayRefreshRateManager {
             _currentRefreshRate.value = targetFps
         }
     }
+
+    /**
+     * Sets preferred refresh rate directly when activity reference is not needed or handled globally.
+     */
+    fun setPreferredRefreshRate(targetFps: Int) {
+        _preferredTargetFps.value = targetFps
+        _currentRefreshRate.value = targetFps
+    }
 }
 
 /**

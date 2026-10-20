@@ -42,8 +42,12 @@ import com.example.data.local.DocumentEntity
 import com.example.ui.AppScreen
 import com.example.ui.PdfViewModel
 import com.example.ui.components.AdfIcon
+import com.example.ui.components.CoreSuiteMenuSheet
+import com.example.ui.components.PDFViewer
+import com.example.ui.components.PDFViewerDialog
 import com.example.ui.components.RefreshRateDialog
 import com.example.ui.theme.*
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -77,6 +81,8 @@ fun HomeScreen(viewModel: PdfViewModel) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilterTab by remember { mutableIntStateOf(0) } // 0: All, 1: PDFs, 2: Word Docs, 3: Starred
     var showRefreshRateDialog by remember { mutableStateOf(false) }
+    var showCoreSuiteMenu by remember { mutableStateOf(false) }
+    var previewDoc by remember { mutableStateOf<UnifiedDocItem?>(null) }
 
     // Auto-scan device documents on mount
     LaunchedEffect(Unit) {
@@ -242,15 +248,40 @@ fun HomeScreen(viewModel: PdfViewModel) {
                         )
                     }
 
-                    // Bootup Animation Replay
+                    // Developer & Credits Screen
                     IconButton(
-                        onClick = { viewModel.navigateTo(AppScreen.BOOTUP_SHOWCASE) },
-                        modifier = Modifier.testTag("bootup_replay_button")
+                        onClick = { viewModel.navigateTo(AppScreen.CREDITS) },
+                        modifier = Modifier.testTag("credits_top_button")
                     ) {
-                        AdfIcon.Crown(
+                        AdfIcon.DeveloperBadge(
                             size = 22.dp,
-                            color = AdfElectricCyan
+                            primaryColor = AdfElectricCyan,
+                            accentColor = Color(0xFFD946EF)
                         )
+                    }
+
+                    // 3 Lines / 3 Dots Menu (replacing Crown icon as requested)
+                    IconButton(
+                        onClick = { showCoreSuiteMenu = true },
+                        modifier = Modifier.testTag("core_suite_menu_button")
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(AdfElectricCyan.copy(alpha = 0.15f))
+                                .border(
+                                    width = 1.dp,
+                                    brush = Brush.linearGradient(listOf(AdfElectricCyan, AdfVibrantBlue)),
+                                    shape = RoundedCornerShape(9.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AdfIcon.MenuThreeLines(
+                                size = 20.dp,
+                                color = AdfElectricCyan
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -300,104 +331,161 @@ fun HomeScreen(viewModel: PdfViewModel) {
             contentPadding = PaddingValues(bottom = 96.dp)
         ) {
             // ==========================================
-            // Section 1: Executive 5-Core Action Menu
+            // ==========================================
+            // Section 1: Core Suite Quick Menu Bar & Shortcuts
             // ==========================================
             item {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    Text(
-                        text = "CORE SUITE MENU",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
-                        ),
-                        color = AdfElectricCyan,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-
-                    // 1. Conversion, 2. FPS Change, 3. PDF Viewer, 4. Signature, 5. Open a File
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // Tap-to-open Core Suite Menu Banner
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("core_suite_quick_banner")
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { showCoreSuiteMenu = true }
+                            .border(
+                                width = 1.dp,
+                                brush = Brush.horizontalGradient(
+                                    listOf(
+                                        AdfElectricCyan.copy(alpha = 0.6f),
+                                        AdfCyberViolet.copy(alpha = 0.4f),
+                                        AdfVibrantBlue.copy(alpha = 0.5f)
+                                    )
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            ),
+                        colors = CardDefaults.cardColors(containerColor = AdfSurfaceCard)
                     ) {
-                        AdfMenuCard(
-                            title = "1. Conversion",
-                            subtitle = "Full bi-directional hub",
-                            badge = "HUB",
-                            accentColor = AdfElectricCyan,
-                            icon = { AdfIcon.Conversion(size = 26.dp, isAnimated = true) },
-                            modifier = Modifier.weight(1f),
-                            onClick = { viewModel.navigateTo(AppScreen.CONVERSION_HUB) }
-                        )
-
-                        AdfMenuCard(
-                            title = "2. FPS Change",
-                            subtitle = "Up to 165Hz sync",
-                            badge = "${currentRefreshRate}Hz",
-                            accentColor = Color(0xFF10B981),
-                            icon = { AdfIcon.FpsSpeed(size = 26.dp) },
-                            modifier = Modifier.weight(1f),
-                            onClick = { showRefreshRateDialog = true }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        AdfMenuCard(
-                            title = "3. PDF Viewer",
-                            subtitle = "Pure viewer (no edit)",
-                            badge = "CLEAN",
-                            accentColor = AdfCyberViolet,
-                            icon = { AdfIcon.PureViewer(size = 26.dp) },
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                viewModel.setPureViewerMode(true)
-                                val firstDoc = documents.firstOrNull()
-                                if (firstDoc != null) {
-                                    viewModel.openDocument(firstDoc)
-                                } else {
-                                    documentPickerLauncher.launch(arrayOf("application/pdf"))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(AdfElectricCyan.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AdfIcon.MenuThreeLines(size = 20.dp, color = AdfElectricCyan)
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "CORE SUITE MENU",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = AdfTextPrimary
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = AdfElectricCyan.copy(alpha = 0.12f)
+                                        ) {
+                                            Text(
+                                                text = "6 ESSENTIAL TOOLS",
+                                                color = AdfElectricCyan,
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = "1. Convertion • 2. Credits • 3. FPS • 4. PDF Viewer • 5. Signature • 6. Watermark",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = AdfTextSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
-                        )
 
-                        AdfMenuCard(
-                            title = "4. Signature",
-                            subtitle = "Digital vault & seals",
-                            badge = "VAULT",
-                            accentColor = AdfAmber,
-                            icon = { AdfIcon.SignatureVault(size = 26.dp) },
-                            modifier = Modifier.weight(1f),
-                            onClick = { viewModel.navigateTo(AppScreen.SIGNATURE_VAULT) }
-                        )
+                            AdfIcon.ChevronRight(
+                                size = 20.dp,
+                                color = AdfElectricCyan
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 5. Open a File (full width banner)
-                    AdfMenuWideCard(
-                        title = "5. Open a File",
-                        subtitle = "Select any PDF or Word document (.docx, .doc) directly from device storage",
-                        badge = "LOCAL STORAGE",
-                        accentColor = AdfVibrantBlue,
-                        icon = { AdfIcon.FileOpen(size = 28.dp, primaryColor = AdfElectricCyan, accentColor = AdfVibrantBlue) },
-                        onClick = {
-                            documentPickerLauncher.launch(
-                                arrayOf(
-                                    "application/pdf",
-                                    "application/msword",
-                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                )
+                    // Fast Horizontal Shortcut Pills
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        item {
+                            QuickToolChip(
+                                title = "1. Convertion",
+                                badge = "HUB",
+                                color = AdfElectricCyan,
+                                onClick = { viewModel.navigateTo(AppScreen.CONVERSION_HUB) }
                             )
                         }
-                    )
+                        item {
+                            QuickToolChip(
+                                title = "2. Credits",
+                                badge = "10/10/2026",
+                                color = Color(0xFFD946EF),
+                                onClick = { viewModel.navigateTo(AppScreen.CREDITS) }
+                            )
+                        }
+                        item {
+                            QuickToolChip(
+                                title = "3. FPS",
+                                badge = "${currentRefreshRate}Hz",
+                                color = Color(0xFF10B981),
+                                onClick = { showRefreshRateDialog = true }
+                            )
+                        }
+                        item {
+                            QuickToolChip(
+                                title = "4. PDF Viewer",
+                                badge = "NO EDIT",
+                                color = AdfCyberViolet,
+                                onClick = {
+                                    viewModel.setPureViewerMode(true)
+                                    val firstDoc = documents.firstOrNull()
+                                    if (firstDoc != null) {
+                                        viewModel.openDocument(firstDoc)
+                                    } else {
+                                        documentPickerLauncher.launch(arrayOf("application/pdf"))
+                                    }
+                                }
+                            )
+                        }
+                        item {
+                            QuickToolChip(
+                                title = "5. Signature",
+                                badge = "VAULT",
+                                color = AdfAmber,
+                                onClick = { viewModel.navigateTo(AppScreen.SIGNATURE_VAULT) }
+                            )
+                        }
+                        item {
+                            QuickToolChip(
+                                title = "6. Watermark",
+                                badge = "STUDIO",
+                                color = AdfElectricCyan,
+                                onClick = {
+                                    viewModel.setSelectedToolTab(4)
+                                    viewModel.navigateTo(AppScreen.TOOLS)
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -610,6 +698,9 @@ fun HomeScreen(viewModel: PdfViewModel) {
                             if (item.originalDoc != null) {
                                 viewModel.deleteDocument(item.originalDoc)
                             }
+                        },
+                        onPreviewFirstPage = {
+                            previewDoc = item
                         }
                     )
                 }
@@ -624,6 +715,98 @@ fun HomeScreen(viewModel: PdfViewModel) {
             onReplayBootup = { viewModel.navigateTo(AppScreen.BOOTUP_SHOWCASE) },
             onDismiss = { showRefreshRateDialog = false }
         )
+    }
+
+    if (showCoreSuiteMenu) {
+        CoreSuiteMenuSheet(
+            onDismiss = { showCoreSuiteMenu = false },
+            onNavigate = { screen -> viewModel.navigateTo(screen) },
+            onOpenToolTab = { tab ->
+                viewModel.setSelectedToolTab(tab)
+                viewModel.navigateTo(AppScreen.TOOLS)
+            },
+            onOpenFpsDialog = { showRefreshRateDialog = true },
+            onOpenPureViewer = {
+                viewModel.setPureViewerMode(true)
+                val firstDoc = documents.firstOrNull()
+                if (firstDoc != null) {
+                    viewModel.openDocument(firstDoc)
+                } else {
+                    documentPickerLauncher.launch(arrayOf("application/pdf"))
+                }
+            },
+            onOpenFile = {
+                documentPickerLauncher.launch(
+                    arrayOf(
+                        "application/pdf",
+                        "application/msword",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+                )
+            }
+        )
+    }
+
+    // First Page Canvas PDFViewer Dialog
+    previewDoc?.let { doc ->
+        val file = doc.originalDoc?.filePath?.let { File(it) }
+        PDFViewerDialog(
+            file = file,
+            uri = doc.deviceFile?.uri,
+            document = doc.originalDoc,
+            title = doc.title,
+            onDismiss = { previewDoc = null },
+            onOpenFullDocument = {
+                viewModel.setPureViewerMode(false)
+                if (doc.originalDoc != null) {
+                    viewModel.openDocument(doc.originalDoc)
+                } else if (doc.deviceFile != null) {
+                    viewModel.importPdfFromUri(doc.deviceFile.uri)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun QuickToolChip(
+    title: String,
+    badge: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = AdfSurfaceCard,
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = Brush.horizontalGradient(listOf(color.copy(alpha = 0.4f), AdfBorderSubtle))
+        ),
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = AdfTextPrimary
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = color.copy(alpha = 0.15f)
+            ) {
+                Text(
+                    text = badge,
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = color,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                )
+            }
+        }
     }
 }
 
@@ -840,7 +1023,8 @@ fun UnifiedDocumentCard(
     onOrganize: () -> Unit,
     onConvertToOther: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onPreviewFirstPage: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
@@ -868,22 +1052,37 @@ fun UnifiedDocumentCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Bespoke Custom Document Icon
+            // Bespoke Custom Document Icon / First Page Canvas Preview
             Box(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(
                         if (doc.isPdf) AdfCoral.copy(alpha = 0.12f) else AdfVibrantBlue.copy(alpha = 0.12f)
-                    ),
+                    )
+                    .clickable(enabled = doc.isPdf) { onPreviewFirstPage() },
                 contentAlignment = Alignment.Center
             ) {
                 if (doc.isPdf) {
-                    AdfIcon.PdfDoc(
-                        size = 30.dp,
-                        primaryColor = AdfCoral,
-                        accentColor = Color.White
-                    )
+                    val file = doc.originalDoc?.filePath?.let { File(it) }
+                    if ((file != null && file.exists()) || doc.deviceFile?.uri != null) {
+                        PDFViewer(
+                            file = file,
+                            uri = doc.deviceFile?.uri,
+                            document = doc.originalDoc,
+                            modifier = Modifier.fillMaxSize(),
+                            scaleFactor = 1.0f,
+                            showPageBadge = false,
+                            showShadow = false,
+                            cornerRadius = 6.dp
+                        )
+                    } else {
+                        AdfIcon.PdfDoc(
+                            size = 30.dp,
+                            primaryColor = AdfCoral,
+                            accentColor = Color.White
+                        )
+                    }
                 } else {
                     AdfIcon.WordDoc(
                         size = 30.dp,
@@ -1038,6 +1237,16 @@ fun UnifiedDocumentCard(
                             onOpenPureViewer()
                         }
                     )
+                    if (doc.isPdf) {
+                        DropdownMenuItem(
+                            text = { Text("Preview First Page (Canvas)", color = AdfElectricCyan) },
+                            leadingIcon = { AdfIcon.PureViewer(size = 18.dp, primaryColor = AdfElectricCyan) },
+                            onClick = {
+                                showMenu = false
+                                onPreviewFirstPage()
+                            }
+                        )
+                    }
                     if (doc.isPdf) {
                         DropdownMenuItem(
                             text = { Text("Organize Pages", color = AdfTextPrimary) },

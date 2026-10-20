@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -312,15 +313,34 @@ fun BootupShowcaseScreen(
                             )
                     )
 
-                    // App Logo
+                    // App Logo with Laser Light Sweep
                     Image(
                         painter = painterResource(id = R.drawable.pdf_aio_logo),
-                        contentDescription = "PDF AIO Logo",
+                        contentDescription = "ADF AIO Logo",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .size(118.dp)
                             .clip(RoundedCornerShape(26.dp))
                             .border(2.dp, Color(0xFF1E293B), RoundedCornerShape(26.dp))
+                    )
+
+                    // Moving Laser Sheen Sweep
+                    val sweepProgress = (frameCount % 60) / 60f
+                    val sheenBrush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0xFF00E5FF).copy(alpha = 0.25f),
+                            Color.White.copy(alpha = 0.4f),
+                            Color.Transparent
+                        ),
+                        start = Offset(sweepProgress * 360f - 120f, 0f),
+                        end = Offset(sweepProgress * 360f + 120f, 260f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(118.dp)
+                            .clip(RoundedCornerShape(26.dp))
+                            .background(sheenBrush)
                     )
                 }
 
@@ -342,6 +362,45 @@ fun BootupShowcaseScreen(
                         ),
                         color = Color(0xFF00E5FF)
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    // Real-time Cyber Kernel Telemetry Line
+                    val terminalStatus = when {
+                        frameCount < 40 -> "KERNEL: ADF AIO v2.4 HYPER-ENGINE ONLINE"
+                        frameCount < 100 -> "DISPLAY: 165Hz VARIABLE REFRESH RATE DETECTED"
+                        frameCount < 180 -> "CONVERTER: 7 BI-DIRECTIONAL ENGINES LOADED"
+                        frameCount < 260 -> "EDITOR: WHITEOUT & INLINE TEXT ENGINE READY"
+                        frameCount < 340 -> "SECURITY: ENCRYPTED SIGNATURE VAULT ACTIVE"
+                        else -> "SYSTEM READY • 100% HARDWARE ACCELERATED"
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color(0xFF0F172A).copy(alpha = 0.85f),
+                        border = CardDefaults.outlinedCardBorder().copy(
+                            brush = Brush.horizontalGradient(
+                                listOf(Color(0xFF00E5FF).copy(alpha = 0.4f), Color(0xFF2563EB).copy(alpha = 0.4f))
+                            )
+                        )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(if ((frameCount / 6) % 2 == 0) Color(0xFF00E5FF) else Color.Transparent)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = terminalStatus,
+                                color = Color(0xFF38BDF8),
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
 
                 // Stage Presentation Card (Cycles through capabilities)

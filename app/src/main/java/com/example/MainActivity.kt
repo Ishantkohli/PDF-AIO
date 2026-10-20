@@ -95,6 +95,10 @@ class MainActivity : ComponentActivity() {
                                 AppScreen.TOOLS -> ToolsScreen(viewModel = viewModel)
                                 AppScreen.SIGNATURE_VAULT -> SignatureVaultScreen(viewModel = viewModel)
                                 AppScreen.PAGE_MANAGER -> PageManagerScreen(viewModel = viewModel)
+                                AppScreen.CREDITS -> com.example.ui.screens.CreditScreen(
+                                    viewModel = viewModel,
+                                    onBack = { viewModel.navigateTo(AppScreen.HOME) }
+                                )
                             }
                         }
 
