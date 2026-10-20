@@ -1063,6 +1063,30 @@ object AdfIcon {
     }
 
     @Composable
+    fun Refresh(
+        modifier: Modifier = Modifier,
+        size: Dp = 20.dp,
+        color: Color = AdfElectricCyan
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.10f
+            val arcRect = androidx.compose.ui.geometry.Rect(w * 0.18f, h * 0.18f, w * 0.82f, h * 0.82f)
+            val arcPath = Path().apply {
+                arcTo(arcRect, 45f, 280f, false)
+            }
+            drawPath(arcPath, color = color, style = Stroke(width = strokeW, cap = StrokeCap.Round))
+            val arrow = Path().apply {
+                moveTo(w * 0.70f, h * 0.10f)
+                lineTo(w * 0.88f, h * 0.22f)
+                lineTo(w * 0.72f, h * 0.38f)
+            }
+            drawPath(arrow, color = color, style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+    }
+
+    @Composable
     fun FolderEmpty(
         modifier: Modifier = Modifier,
         size: Dp = 48.dp,

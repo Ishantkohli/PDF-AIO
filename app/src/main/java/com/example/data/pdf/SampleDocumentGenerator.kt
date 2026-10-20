@@ -10,6 +10,13 @@ import java.io.FileOutputStream
 
 object SampleDocumentGenerator {
 
+    fun deleteSampleFiles(context: Context) {
+        val sampleDir = File(context.filesDir, "sample_pdfs")
+        if (sampleDir.exists()) {
+            sampleDir.deleteRecursively()
+        }
+    }
+
     fun ensureSampleDocuments(context: Context): List<File> {
         val sampleDir = File(context.filesDir, "sample_pdfs")
         if (!sampleDir.exists()) {

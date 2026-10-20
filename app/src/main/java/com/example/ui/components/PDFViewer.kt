@@ -285,13 +285,24 @@ fun PDFViewer(
                 val scaledW = (rawW * scaleFactor).toInt().coerceIn(1, maxDim)
                 val scaledH = (rawH * scaleFactor).toInt().coerceIn(1, maxDim)
 
-                val bitmap = Bitmap.createBitmap(scaledW, scaledH, Bitmap.Config.ARGB_8888)
-                bitmap.eraseColor(android.graphics.Color.WHITE)
+                val bitmap = try {
+                    Bitmap.createBitmap(scaledW, scaledH, Bitmap.Config.ARGB_8888).apply {
+                        eraseColor(android.graphics.Color.WHITE)
+                    }
+                } catch (oom: OutOfMemoryError) {
+                    pageBitmapCache.clear()
+                    System.gc()
+                    val fallbackW = (scaledW * 0.65f).toInt().coerceAtLeast(1)
+                    val fallbackH = (scaledH * 0.65f).toInt().coerceAtLeast(1)
+                    Bitmap.createBitmap(fallbackW, fallbackH, Bitmap.Config.RGB_565).apply {
+                        eraseColor(android.graphics.Color.WHITE)
+                    }
+                }
 
                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
 
-                // Store in local cache (retaining up to 8 pages)
-                if (pageBitmapCache.size > 8) {
+                // Store in local cache (retaining up to 4 pages on mobile to keep memory light)
+                if (pageBitmapCache.size > 4) {
                     val oldestKey = pageBitmapCache.keys.firstOrNull { it != clampedPage }
                     if (oldestKey != null) {
                         pageBitmapCache.remove(oldestKey)

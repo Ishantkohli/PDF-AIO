@@ -63,4 +63,7 @@ interface PdfDao {
 
     @Query("DELETE FROM signatures WHERE id = :id")
     suspend fun deleteSignatureById(id: Long)
+
+    @Query("DELETE FROM documents WHERE isSample = 1")
+    suspend fun deleteSampleDocuments()
 }

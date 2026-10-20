@@ -1,7 +1,6 @@
 package com.example.ui.components
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +17,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,14 +26,9 @@ import com.example.ui.AppScreen
 import com.example.ui.theme.*
 
 /**
- * Core Suite Menu Sheet
- * Displays the 6 core tools requested by the user:
- * 1. Convertion (PDF To Word, Word to PDF, Images to PDF, etc.)
- * 2. Credits (Build By - Ishant Kohli, Coded By - Google AI Studio, App Official Build Date - 10/10/2026)
- * 3. FPS (Display refresh rate change & sync)
- * 4. PDF only Viewer (Pure viewer without edit controls)
- * 5. Signature (Digital Signature Vault)
- * 6. Make/Create a Watermark (Watermark Studio)
+ * Optimized Core Suite Menu Sheet
+ * Universal responsiveness for every phone worldwide (small, tall, foldable, tablet).
+ * Shortened, elegant architecture with 100% feature & testTag preservation.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,170 +51,103 @@ fun CoreSuiteMenuSheet(
         scrimColor = Color.Black.copy(alpha = 0.72f),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         dragHandle = {
-            Column(
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(44.dp)
-                        .height(4.dp)
-                        .clip(CircleShape)
-                        .background(AdfElectricCyan.copy(alpha = 0.6f))
-                )
-            }
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .width(44.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(AdfElectricCyan.copy(alpha = 0.6f))
+            )
         }
     ) {
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .navigationBarsPadding(),
+            contentAlignment = Alignment.TopCenter
         ) {
-            // Header Bar
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "CORE SUITE MENU",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 1.sp
-                                ),
-                                color = AdfTextPrimary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = AdfElectricCyan.copy(alpha = 0.15f),
-                                border = CardDefaults.outlinedCardBorder().copy(
-                                    brush = Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))
-                                )
-                            ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 620.dp) // Responsive adaptive constraint for foldables and tablets worldwide
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Header Bar
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "240V • 10/10/2026",
-                                    color = AdfElectricCyan,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    text = "CORE SUITE MENU",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Black,
+                                        letterSpacing = 1.sp
+                                    ),
+                                    color = AdfTextPrimary
                                 )
-                            }
-                        }
-                        Text(
-                            text = "Executive multi-tool matrix & developer hub",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AdfTextSecondary
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(AdfSurfaceCard)
-                    ) {
-                        AdfIcon.Close(size = 18.dp, color = AdfTextSecondary)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-                HorizontalDivider(color = AdfBorderSubtle)
-            }
-
-            // ==========================================
-            // 1. Convertion
-            // ==========================================
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("menu_item_conversion")
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.horizontalGradient(
-                                listOf(AdfElectricCyan.copy(alpha = 0.6f), AdfVibrantBlue.copy(alpha = 0.3f))
-                            ),
-                            shape = RoundedCornerShape(16.dp)
-                        ),
-                    colors = CardDefaults.cardColors(containerColor = AdfSurfaceCard)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { isConversionExpanded = !isConversionExpanded },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(AdfElectricCyan.copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = AdfElectricCyan.copy(alpha = 0.15f),
+                                    border = CardDefaults.outlinedCardBorder().copy(
+                                        brush = Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))
+                                    )
                                 ) {
-                                    AdfIcon.Conversion(size = 24.dp, isAnimated = true)
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = "1. Convertion",
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = AdfTextPrimary
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color = AdfElectricCyan.copy(alpha = 0.12f)
-                                        ) {
-                                            Text(
-                                                text = if (isConversionExpanded) "HIDE" else "SHOW ALL",
-                                                color = AdfElectricCyan,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
                                     Text(
-                                        text = "PDF to Word, Word to PDF, Images to PDF, etc.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = AdfTextSecondary
+                                        text = "240V • 10/10/2026",
+                                        color = AdfElectricCyan,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
                             }
-
-                            IconButton(
-                                onClick = { isConversionExpanded = !isConversionExpanded },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                AdfIcon.ChevronDown(
-                                    size = 18.dp,
-                                    color = AdfElectricCyan
-                                )
-                            }
+                            Text(
+                                text = "Executive multi-tool matrix & developer hub",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AdfTextSecondary
+                            )
                         }
 
-                        // Submenu items (always easily accessible)
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(AdfSurfaceCard)
+                        ) {
+                            AdfIcon.Close(size = 18.dp, color = AdfTextSecondary)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    HorizontalDivider(color = AdfBorderSubtle)
+                }
+
+                // 1. Convertion Tool Card
+                item {
+                    CoreSuiteCard(
+                        tag = "conversion",
+                        accentColor = AdfElectricCyan,
+                        icon = { AdfIcon.Conversion(size = 24.dp, isAnimated = true) },
+                        title = "1. Convertion",
+                        badge = if (isConversionExpanded) "HIDE" else "SHOW ALL",
+                        subtitle = "PDF to Word, Word to PDF, Images to PDF, etc.",
+                        onHeaderClick = { isConversionExpanded = !isConversionExpanded },
+                        headerAction = {
+                            AdfIcon.ChevronDown(size = 18.dp, color = AdfElectricCyan)
+                        },
+                        actionText = "Open Full Conversion Hub Window →",
+                        onAction = {
+                            onDismiss()
+                            onNavigate(AppScreen.CONVERSION_HUB)
+                        }
+                    ) {
                         AnimatedVisibility(
                             visible = isConversionExpanded,
                             enter = expandVertically() + fadeIn(),
@@ -228,308 +156,90 @@ fun CoreSuiteMenuSheet(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 12.dp),
+                                    .padding(top = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 HorizontalDivider(color = AdfBorderSubtle.copy(alpha = 0.5f))
-
-                                // PDF to Word
-                                ConversionSubItem(
-                                    title = "PDF to Word (.docx)",
-                                    subtitle = "Extract text and tables into editable Microsoft Word docx",
-                                    badge = "DOCX",
-                                    badgeColor = AdfEmerald,
-                                    onClick = {
-                                        onDismiss()
-                                        onOpenToolTab(3) // Tab 3: PDF to Word
-                                        onNavigate(AppScreen.TOOLS)
-                                    }
+                                val subItems = listOf(
+                                    Triple("PDF to Word (.docx)", "Extract text and tables into editable Word docx", "DOCX" to AdfEmerald),
+                                    Triple("Word to PDF", "Standardize .docx and .doc into formatted PDF sheets", "PDF" to AdfVibrantBlue),
+                                    Triple("Images to PDF", "Compile camera photos & graphic files into a PDF", "PHOTOS" to AdfCoral),
+                                    Triple("PDF to Images", "Render PDF pages into ultra HD PNG or JPEG files", "PNG/JPG" to AdfElectricCyan),
+                                    Triple("Merge Multiple PDFs", "Combine 2 or more PDF documents into one master document", "MERGE" to AdfAmber),
+                                    Triple("Organize & Rotate Pages", "Reorder sheets, rotate 90°/180°, and delete pages", "PAGES" to AdfCyberViolet)
                                 )
-
-                                // Word to PDF
-                                ConversionSubItem(
-                                    title = "Word to PDF",
-                                    subtitle = "Standardize .docx and .doc into formatted PDF sheets",
-                                    badge = "PDF",
-                                    badgeColor = AdfVibrantBlue,
-                                    onClick = {
-                                        onDismiss()
-                                        onOpenToolTab(2) // Tab 2: Word to PDF
-                                        onNavigate(AppScreen.TOOLS)
-                                    }
-                                )
-
-                                // Images to PDF
-                                ConversionSubItem(
-                                    title = "Images to PDF",
-                                    subtitle = "Compile camera photos & graphic files into a PDF",
-                                    badge = "PHOTOS",
-                                    badgeColor = AdfCoral,
-                                    onClick = {
-                                        onDismiss()
-                                        onOpenToolTab(0) // Tab 0: Images to PDF
-                                        onNavigate(AppScreen.TOOLS)
-                                    }
-                                )
-
-                                // PDF to Images
-                                ConversionSubItem(
-                                    title = "PDF to Images",
-                                    subtitle = "Render PDF pages into ultra HD PNG or JPEG files",
-                                    badge = "PNG/JPG",
-                                    badgeColor = AdfElectricCyan,
-                                    onClick = {
-                                        onDismiss()
-                                        onOpenToolTab(1) // Tab 1: PDF to Images
-                                        onNavigate(AppScreen.TOOLS)
-                                    }
-                                )
-
-                                // Merge Multiple PDFs
-                                ConversionSubItem(
-                                    title = "Merge Multiple PDFs",
-                                    subtitle = "Combine 2 or more PDF documents into one master document",
-                                    badge = "MERGE",
-                                    badgeColor = AdfAmber,
-                                    onClick = {
-                                        onDismiss()
-                                        onOpenToolTab(5) // Tab 5: Merge
-                                        onNavigate(AppScreen.TOOLS)
-                                    }
-                                )
-
-                                // Organize Pages
-                                ConversionSubItem(
-                                    title = "Organize & Rotate Pages",
-                                    subtitle = "Reorder sheets, rotate 90°/180°, and delete pages",
-                                    badge = "PAGES",
-                                    badgeColor = AdfCyberViolet,
-                                    onClick = {
-                                        onDismiss()
-                                        onOpenToolTab(6) // Tab 6: Organize
-                                        onNavigate(AppScreen.TOOLS)
-                                    }
-                                )
+                                subItems.forEachIndexed { idx, (title, sub, badgePair) ->
+                                    val toolTab = when (idx) { 0 -> 3; 1 -> 2; 2 -> 0; 3 -> 1; 4 -> 5; else -> 6 }
+                                    ConversionSubItem(
+                                        title = title,
+                                        subtitle = sub,
+                                        badge = badgePair.first,
+                                        badgeColor = badgePair.second,
+                                        onClick = {
+                                            onDismiss()
+                                            onOpenToolTab(toolTab)
+                                            onNavigate(AppScreen.TOOLS)
+                                        }
+                                    )
+                                }
                             }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(
-                            onClick = {
-                                onDismiss()
-                                onNavigate(AppScreen.CONVERSION_HUB)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = AdfElectricCyan.copy(alpha = 0.18f),
-                                contentColor = AdfElectricCyan
-                            )
-                        ) {
-                            Text(
-                                text = "Open Full Conversion Hub Window →",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
                         }
                     }
                 }
-            }
 
-            // ==========================================
-            // 2. Credits
-            // ==========================================
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("menu_item_credits")
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.horizontalGradient(
-                                listOf(Color(0xFFD946EF).copy(alpha = 0.6f), AdfElectricCyan.copy(alpha = 0.3f))
-                            ),
-                            shape = RoundedCornerShape(16.dp)
-                        ),
-                    colors = CardDefaults.cardColors(containerColor = AdfSurfaceCard)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFFD946EF).copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                AdfIcon.DeveloperBadge(
-                                    size = 24.dp,
-                                    primaryColor = AdfElectricCyan,
-                                    accentColor = Color(0xFFD946EF)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "2. Credits",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = AdfTextPrimary
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = Color(0xFFD946EF).copy(alpha = 0.15f)
-                                    ) {
-                                        Text(
-                                            text = "DEVELOPER INFO",
-                                            color = Color(0xFFD946EF),
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = "Build By Ishant Kohli • Coded By Google AI Studio",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AdfTextSecondary
-                                )
-                            }
+                // 2. Credits
+                item {
+                    CoreSuiteCard(
+                        tag = "credits",
+                        accentColor = Color(0xFFD946EF),
+                        icon = { AdfIcon.DeveloperBadge(size = 24.dp, primaryColor = AdfElectricCyan, accentColor = Color(0xFFD946EF)) },
+                        title = "2. Credits",
+                        badge = "DEVELOPER INFO",
+                        subtitle = "Build By Ishant Kohli • Coded By Google AI Studio",
+                        actionText = "View Animated Follow Me & Social Handles →",
+                        onAction = {
+                            onDismiss()
+                            onNavigate(AppScreen.CREDITS)
                         }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Developer Details Box
+                    ) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = AdfMidnightSurface,
                             border = CardDefaults.outlinedCardBorder().copy(
-                                brush = Brush.horizontalGradient(
-                                    listOf(Color(0xFFD946EF).copy(alpha = 0.3f), AdfElectricCyan.copy(alpha = 0.3f))
-                                )
+                                brush = Brush.horizontalGradient(listOf(Color(0xFFD946EF).copy(alpha = 0.3f), AdfElectricCyan.copy(alpha = 0.3f)))
                             ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(10.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                CreditDetailRow(label = "Build By", value = "Ishant Kohli", highlightColor = AdfElectricCyan)
-                                CreditDetailRow(label = "Coded By", value = "Google AI Studio", highlightColor = Color(0xFFD946EF))
-                                CreditDetailRow(label = "App Official Build Date", value = "10/10/2026", highlightColor = Color(0xFF10B981))
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Button(
-                            onClick = {
-                                onDismiss()
-                                onNavigate(AppScreen.CREDITS)
-                            },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(38.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFD946EF).copy(alpha = 0.18f),
-                                contentColor = Color(0xFFD946EF)
-                            )
+                                .padding(vertical = 10.dp)
                         ) {
-                            Text(
-                                text = "View Animated Follow Me & Social Handles →",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                CreditDetailRow("Build By", "Ishant Kohli", AdfElectricCyan)
+                                CreditDetailRow("Coded By", "Google AI Studio", Color(0xFFD946EF))
+                                CreditDetailRow("App Official Build Date", "10/10/2026", Color(0xFF10B981))
+                            }
                         }
                     }
                 }
-            }
 
-            // ==========================================
-            // 3. FPS
-            // ==========================================
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("menu_item_fps")
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.horizontalGradient(
-                                listOf(Color(0xFF10B981).copy(alpha = 0.6f), AdfElectricCyan.copy(alpha = 0.3f))
-                            ),
-                            shape = RoundedCornerShape(16.dp)
-                        ),
-                    colors = CardDefaults.cardColors(containerColor = AdfSurfaceCard)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp)
+                // 3. FPS
+                item {
+                    CoreSuiteCard(
+                        tag = "fps",
+                        accentColor = Color(0xFF10B981),
+                        icon = { AdfIcon.FpsSpeed(size = 24.dp) },
+                        title = "3. FPS",
+                        badge = "${currentRefreshRate}Hz ACTIVE",
+                        subtitle = "Dynamic refresh rate tuning up to 165Hz with HUD",
+                        actionText = "Open FPS Change Dialog & On-Screen HUD →",
+                        onAction = {
+                            onDismiss()
+                            onOpenFpsDialog()
+                        }
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFF10B981).copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                AdfIcon.FpsSpeed(size = 24.dp)
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "3. FPS",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = AdfTextPrimary
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = Color(0xFF10B981).copy(alpha = 0.15f)
-                                    ) {
-                                        Text(
-                                            text = "${currentRefreshRate}Hz ACTIVE",
-                                            color = Color(0xFF10B981),
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = "Dynamic refresh rate tuning up to 165Hz with HUD",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AdfTextSecondary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Quick rate pills
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             listOf(60, 90, 120, 144, 165).forEach { rate ->
@@ -543,9 +253,7 @@ fun CoreSuiteMenuSheet(
                                     ),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .clickable {
-                                            DisplayRefreshRateManager.setPreferredRefreshRate(rate)
-                                        }
+                                        .clickable { DisplayRefreshRateManager.setPreferredRefreshRate(rate) }
                                 ) {
                                     Text(
                                         text = "${rate}Hz",
@@ -553,359 +261,226 @@ fun CoreSuiteMenuSheet(
                                         fontSize = 11.sp,
                                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
                                         modifier = Modifier.padding(vertical = 6.dp),
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        textAlign = TextAlign.Center
                                     )
                                 }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Button(
-                            onClick = {
-                                onDismiss()
-                                onOpenFpsDialog()
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF10B981).copy(alpha = 0.18f),
-                                contentColor = Color(0xFF10B981)
-                            )
-                        ) {
-                            Text(
-                                text = "Open FPS Change Dialog & On-Screen HUD →",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
                     }
                 }
-            }
 
-            // ==========================================
-            // 4. PDF only Viewer
-            // ==========================================
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("menu_item_pdf_viewer")
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.horizontalGradient(
-                                listOf(AdfCyberViolet.copy(alpha = 0.6f), AdfElectricCyan.copy(alpha = 0.3f))
-                            ),
-                            shape = RoundedCornerShape(16.dp)
-                        ),
-                    colors = CardDefaults.cardColors(containerColor = AdfSurfaceCard)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp)
+                // 4. PDF only Viewer
+                item {
+                    CoreSuiteCard(
+                        tag = "pdf_viewer",
+                        accentColor = AdfCyberViolet,
+                        icon = { AdfIcon.PureViewer(size = 24.dp) },
+                        title = "4. PDF only Viewer",
+                        badge = "NO EDITING",
+                        subtitle = "Only viewer, no edit toolbar: pure distraction-free reading",
+                        actionText = "Launch Pure PDF Viewer Mode →",
+                        onAction = {
+                            onDismiss()
+                            onOpenPureViewer()
+                        }
+                    )
+                }
+
+                // 5. Signature
+                item {
+                    CoreSuiteCard(
+                        tag = "signature",
+                        accentColor = AdfAmber,
+                        icon = { AdfIcon.SignatureVault(size = 24.dp) },
+                        title = "5. Signature",
+                        badge = "VAULT",
+                        subtitle = "Digital Fill & Sign Vault with stylus stroke smoothing & seal management",
+                        actionText = "Open Fill & Sign Vault →",
+                        onAction = {
+                            onDismiss()
+                            onNavigate(AppScreen.SIGNATURE_VAULT)
+                        }
+                    )
+                }
+
+                // 6. Make/Create a Watermark
+                item {
+                    CoreSuiteCard(
+                        tag = "watermark",
+                        accentColor = AdfElectricCyan,
+                        icon = { AdfIcon.Watermark(size = 24.dp) },
+                        title = "6. Make/Create a Watermark",
+                        badge = "STUDIO",
+                        subtitle = "Apply custom text, rotation angle (0°-90°), opacity, & tiled patterns",
+                        actionText = "Open Watermark Studio & Creator →",
+                        onAction = {
+                            onDismiss()
+                            onOpenToolTab(4)
+                            onNavigate(AppScreen.TOOLS)
+                        }
+                    )
+                }
+
+                // Quick Actions Footer
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(AdfCyberViolet.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                AdfIcon.PureViewer(size = 24.dp)
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "4. PDF only Viewer",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = AdfTextPrimary
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = AdfCyberViolet.copy(alpha = 0.15f)
-                                    ) {
-                                        Text(
-                                            text = "NO EDITING",
-                                            color = AdfCyberViolet,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = "Only viewer, no edit toolbar: pure distraction-free reading",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AdfTextSecondary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Button(
+                        OutlinedButton(
                             onClick = {
                                 onDismiss()
-                                onOpenPureViewer()
+                                onOpenFile()
                             },
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = AdfCyberViolet.copy(alpha = 0.18f),
-                                contentColor = AdfCyberViolet
+                                .weight(1f)
+                                .height(44.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = CardDefaults.outlinedCardBorder().copy(
+                                brush = Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))
                             )
                         ) {
-                            Text(
-                                text = "Launch Pure PDF Viewer Mode →",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-
-            // ==========================================
-            // 5. Signature
-            // ==========================================
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("menu_item_signature")
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.horizontalGradient(
-                                listOf(AdfAmber.copy(alpha = 0.6f), AdfElectricCyan.copy(alpha = 0.3f))
-                            ),
-                            shape = RoundedCornerShape(16.dp)
-                        ),
-                    colors = CardDefaults.cardColors(containerColor = AdfSurfaceCard)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(AdfAmber.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                AdfIcon.SignatureVault(size = 24.dp)
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "5. Signature",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = AdfTextPrimary
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = AdfAmber.copy(alpha = 0.15f)
-                                    ) {
-                                        Text(
-                                            text = "VAULT",
-                                            color = AdfAmber,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = "Digital Fill & Sign Vault with stylus stroke smoothing & seal management",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AdfTextSecondary
-                                )
-                            }
+                            AdfIcon.FileOpen(size = 18.dp, primaryColor = AdfElectricCyan, accentColor = AdfVibrantBlue)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Open a File", color = AdfElectricCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Button(
+                        OutlinedButton(
                             onClick = {
                                 onDismiss()
-                                onNavigate(AppScreen.SIGNATURE_VAULT)
+                                onNavigate(AppScreen.BOOTUP_SHOWCASE)
                             },
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = AdfAmber.copy(alpha = 0.18f),
-                                contentColor = AdfAmber
+                                .weight(1f)
+                                .height(44.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = CardDefaults.outlinedCardBorder().copy(
+                                brush = Brush.horizontalGradient(listOf(Color(0xFFD946EF), AdfElectricCyan))
                             )
                         ) {
-                            Text(
-                                text = "Open Fill & Sign Vault →",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            AdfIcon.Crown(size = 18.dp, color = Color(0xFFD946EF))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Replay Bootup", color = Color(0xFFD946EF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
+        }
+    }
+}
 
-            // ==========================================
-            // 6. Make/Create a Watermaker
-            // ==========================================
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("menu_item_watermark")
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.horizontalGradient(
-                                listOf(AdfElectricCyan.copy(alpha = 0.6f), AdfCyberViolet.copy(alpha = 0.4f))
-                            ),
-                            shape = RoundedCornerShape(16.dp)
-                        ),
-                    colors = CardDefaults.cardColors(containerColor = AdfSurfaceCard)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(AdfElectricCyan.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                AdfIcon.Watermark(size = 24.dp)
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "6. Make/Create a Watermark",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = AdfTextPrimary
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = AdfElectricCyan.copy(alpha = 0.15f)
-                                    ) {
-                                        Text(
-                                            text = "STUDIO",
-                                            color = AdfElectricCyan,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = "Apply custom text, rotation angle (0°-90°), opacity, & tiled patterns",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AdfTextSecondary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Button(
-                            onClick = {
-                                onDismiss()
-                                onOpenToolTab(4) // Tab 4: Watermark Studio
-                                onNavigate(AppScreen.TOOLS)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = AdfElectricCyan.copy(alpha = 0.18f),
-                                contentColor = AdfElectricCyan
-                            )
-                        ) {
-                            Text(
-                                text = "Open Watermark Studio & Creator →",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Quick Actions Footer
-            item {
+/**
+ * Universal, clean reusable card for Core Suite tools
+ */
+@Composable
+private fun CoreSuiteCard(
+    tag: String,
+    accentColor: Color,
+    icon: @Composable () -> Unit,
+    title: String,
+    badge: String,
+    subtitle: String,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null,
+    onHeaderClick: (() -> Unit)? = null,
+    headerAction: (@Composable () -> Unit)? = null,
+    content: (@Composable ColumnScope.() -> Unit)? = null
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("menu_item_$tag")
+            .clip(RoundedCornerShape(16.dp))
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(
+                    listOf(accentColor.copy(alpha = 0.6f), AdfVibrantBlue.copy(alpha = 0.3f))
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        colors = CardDefaults.cardColors(containerColor = AdfSurfaceCard)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (onHeaderClick != null) Modifier.clickable { onHeaderClick() } else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    OutlinedButton(
-                        onClick = {
-                            onDismiss()
-                            onOpenFile()
-                        },
+                    Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))
-                        )
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(accentColor.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        AdfIcon.FileOpen(size = 18.dp, primaryColor = AdfElectricCyan, accentColor = AdfVibrantBlue)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Open a File", color = AdfElectricCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        icon()
                     }
-
-                    OutlinedButton(
-                        onClick = {
-                            onDismiss()
-                            onNavigate(AppScreen.BOOTUP_SHOWCASE)
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = Brush.horizontalGradient(listOf(Color(0xFFD946EF), AdfElectricCyan))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = AdfTextPrimary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = accentColor.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = badge,
+                                    color = accentColor,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AdfTextSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
-                    ) {
-                        AdfIcon.Crown(size = 18.dp, color = Color(0xFFD946EF))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Replay Bootup", color = Color(0xFFD946EF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
+                headerAction?.invoke()
+            }
 
-                Spacer(modifier = Modifier.height(20.dp))
+            content?.invoke(this)
+
+            if (actionText != null && onAction != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = onAction,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(38.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = accentColor.copy(alpha = 0.18f),
+                        contentColor = accentColor
+                    )
+                ) {
+                    Text(
+                        text = actionText,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
