@@ -34,7 +34,8 @@ enum class AppScreen {
     READER,
     TOOLS,
     SIGNATURE_VAULT,
-    PAGE_MANAGER
+    PAGE_MANAGER,
+    CREDITS
 }
 
 enum class AnnotationTool {
@@ -70,7 +71,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Navigation state
-    private val _currentScreen = MutableStateFlow(AppScreen.BOOTUP_SHOWCASE)
+    private val _currentScreen = MutableStateFlow(AppScreen.HOME)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
 
     // FPS Telemetry HUD state
@@ -110,10 +111,65 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val scanned = com.example.data.local.DeviceDocumentScanner.scanDeviceDocuments(getApplication())
                 _deviceFiles.value = scanned
+                _statusMessage.value = if (scanned.isNotEmpty()) "Found ${scanned.size} documents on device storage" else "Scan finished (0 documents found in standard folders)"
             } catch (e: Exception) {
                 android.util.Log.e("PdfViewModel", "Failed to scan device documents", e)
+                _statusMessage.value = "Storage scan encountered an issue: ${e.message}"
             } finally {
                 _isScanningDeviceFiles.value = false
+            }
+        }
+    }
+
+    fun scanFolderTree(treeUri: Uri) {
+        viewModelScope.launch {
+            _isScanningDeviceFiles.value = true
+            try {
+                val scanned = com.example.data.local.DeviceDocumentScanner.scanDocumentTree(getApplication(), treeUri)
+                val combined = (_deviceFiles.value + scanned).distinctBy { "${it.title}_${it.sizeBytes}" }
+                _deviceFiles.value = combined
+                _statusMessage.value = "Scanned ${scanned.size} documents from chosen folder!"
+            } catch (e: Exception) {
+                android.util.Log.e("PdfViewModel", "Failed to scan folder tree", e)
+                _statusMessage.value = "Folder scan error: ${e.message}"
+            } finally {
+                _isScanningDeviceFiles.value = false
+            }
+        }
+    }
+
+    fun openDeviceFile(fileItem: com.example.data.local.DeviceFileItem, pureViewer: Boolean = false) {
+        viewModelScope.launch {
+            _isPureViewerMode.value = pureViewer
+            val context = getApplication<Application>()
+            when (fileItem.fileType) {
+                com.example.data.local.DeviceFileType.PDF -> {
+                    importPdfFromUri(fileItem.uri)
+                }
+                com.example.data.local.DeviceFileType.WORD_DOCX,
+                com.example.data.local.DeviceFileType.WORD_DOC -> {
+                    _statusMessage.value = "Converting Word document to PDF..."
+                    try {
+                        val convertedPdf = File(context.cacheDir, "word_${System.currentTimeMillis()}_${fileItem.title.replace(" ", "_")}.pdf")
+                        val success = DocumentConverterEngine.convertWordToPdf(
+                            context = context,
+                            wordUri = fileItem.uri,
+                            outputFile = convertedPdf,
+                            docTitle = fileItem.title
+                        )
+                        if (success && convertedPdf.exists() && convertedPdf.length() > 0) {
+                            importPdfFromUri(Uri.fromFile(convertedPdf))
+                        } else {
+                            _statusMessage.value = "Could not convert Word document"
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("PdfViewModel", "Failed to open Word file", e)
+                        _statusMessage.value = "Error opening Word document: ${e.message}"
+                    }
+                }
+                else -> {
+                    importPdfFromUri(fileItem.uri)
+                }
             }
         }
     }
@@ -288,34 +344,17 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
-        initializeSamples()
+        removeSampleFiles()
         scanDeviceDocuments()
     }
 
-    private fun initializeSamples() {
+    private fun removeSampleFiles() {
         viewModelScope.launch(Dispatchers.IO) {
-            val samples = SampleDocumentGenerator.ensureSampleDocuments(getApplication())
-            for (file in samples) {
-                val existing = dao.findDocumentByPath(file.absolutePath)
-                if (existing == null) {
-                    val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-                    val renderer = android.graphics.pdf.PdfRenderer(pfd)
-                    val pages = renderer.pageCount
-                    renderer.close()
-                    pfd.close()
-
-                    val cleanTitle = file.nameWithoutExtension.replace('_', ' ')
-                    dao.insertDocument(
-                        DocumentEntity(
-                            uriString = Uri.fromFile(file).toString(),
-                            title = cleanTitle,
-                            filePath = file.absolutePath,
-                            pageCount = pages,
-                            isSample = true,
-                            fileSizeBytes = file.length()
-                        )
-                    )
-                }
+            try {
+                dao.deleteSampleDocuments()
+                SampleDocumentGenerator.deleteSampleFiles(getApplication())
+            } catch (e: Exception) {
+                android.util.Log.w("PdfViewModel", "Failed to remove sample files: ${e.message}")
             }
         }
     }

@@ -20,8 +20,10 @@ val AdfCoral = Color(0xFFEF4444)
 // Midnight Tech Backgrounds & Obsidian Surfaces
 val AdfMidnightBackground = Color(0xFF070A10)
 val AdfObsidianSurface = Color(0xFF0D121F)
+val AdfMidnightSurface = AdfObsidianSurface
 val AdfSurfaceVariant = Color(0xFF141B2D)
 val AdfSurfaceElevated = Color(0xFF1A233A)
+val AdfSurfaceCard = AdfSurfaceElevated
 val AdfBorderSubtle = Color(0xFF1E293B)
 val AdfBorderGlow = Color(0xFF334155)
 

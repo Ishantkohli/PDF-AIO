@@ -783,6 +783,26 @@ object AdfIcon {
     }
 
     @Composable
+    fun ChevronDown(
+        modifier: Modifier = Modifier,
+        size: Dp = 24.dp,
+        color: Color = AdfElectricCyan
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.09f
+
+            val path = Path().apply {
+                moveTo(w * 0.22f, h * 0.38f)
+                lineTo(w * 0.50f, h * 0.66f)
+                lineTo(w * 0.78f, h * 0.38f)
+            }
+            drawPath(path, color = color, style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+    }
+
+    @Composable
     fun Star(
         modifier: Modifier = Modifier,
         size: Dp = 24.dp,
@@ -1005,6 +1025,68 @@ object AdfIcon {
     }
 
     @Composable
+    fun MenuThreeLines(
+        modifier: Modifier = Modifier,
+        size: Dp = 24.dp,
+        color: Color = AdfElectricCyan
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.09f
+
+            // Top line
+            drawLine(
+                color = color,
+                start = Offset(w * 0.16f, h * 0.28f),
+                end = Offset(w * 0.84f, h * 0.28f),
+                strokeWidth = strokeW,
+                cap = StrokeCap.Round
+            )
+            // Middle line (styled with subtle cyber step)
+            drawLine(
+                color = color,
+                start = Offset(w * 0.16f, h * 0.50f),
+                end = Offset(w * 0.68f, h * 0.50f),
+                strokeWidth = strokeW,
+                cap = StrokeCap.Round
+            )
+            // Bottom line
+            drawLine(
+                color = color,
+                start = Offset(w * 0.16f, h * 0.72f),
+                end = Offset(w * 0.84f, h * 0.72f),
+                strokeWidth = strokeW,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+
+    @Composable
+    fun Refresh(
+        modifier: Modifier = Modifier,
+        size: Dp = 20.dp,
+        color: Color = AdfElectricCyan
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.10f
+            val arcRect = androidx.compose.ui.geometry.Rect(w * 0.18f, h * 0.18f, w * 0.82f, h * 0.82f)
+            val arcPath = Path().apply {
+                arcTo(arcRect, 45f, 280f, false)
+            }
+            drawPath(arcPath, color = color, style = Stroke(width = strokeW, cap = StrokeCap.Round))
+            val arrow = Path().apply {
+                moveTo(w * 0.70f, h * 0.10f)
+                lineTo(w * 0.88f, h * 0.22f)
+                lineTo(w * 0.72f, h * 0.38f)
+            }
+            drawPath(arrow, color = color, style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+    }
+
+    @Composable
     fun FolderEmpty(
         modifier: Modifier = Modifier,
         size: Dp = 48.dp,
@@ -1038,6 +1120,418 @@ object AdfIcon {
 
             // Central minimal slash or zero
             drawCircle(color = accentColor.copy(alpha = 0.4f), radius = w * 0.12f, center = Offset(w * 0.5f, h * 0.58f))
+        }
+    }
+
+    @Composable
+    fun Lightning(
+        modifier: Modifier = Modifier,
+        size: Dp = 20.dp,
+        color: Color = Color(0xFFD946EF)
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val bolt = Path().apply {
+                moveTo(w * 0.56f, h * 0.08f)
+                lineTo(w * 0.22f, h * 0.54f)
+                lineTo(w * 0.48f, h * 0.54f)
+                lineTo(w * 0.42f, h * 0.92f)
+                lineTo(w * 0.78f, h * 0.44f)
+                lineTo(w * 0.52f, h * 0.44f)
+                close()
+            }
+            drawPath(bolt, color = color, style = Fill)
+        }
+    }
+
+    @Composable
+    fun DeveloperBadge(
+        modifier: Modifier = Modifier,
+        size: Dp = 24.dp,
+        primaryColor: Color = AdfElectricCyan,
+        accentColor: Color = AdfCyberViolet
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.09f
+
+            // Left angle bracket <
+            val leftBracket = Path().apply {
+                moveTo(w * 0.32f, h * 0.28f)
+                lineTo(w * 0.14f, h * 0.50f)
+                lineTo(w * 0.32f, h * 0.72f)
+            }
+            drawPath(leftBracket, color = primaryColor, style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+
+            // Right angle bracket >
+            val rightBracket = Path().apply {
+                moveTo(w * 0.68f, h * 0.28f)
+                lineTo(w * 0.86f, h * 0.50f)
+                lineTo(w * 0.68f, h * 0.72f)
+            }
+            drawPath(rightBracket, color = primaryColor, style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+
+            // Forward slash /
+            drawLine(
+                color = accentColor,
+                start = Offset(w * 0.58f, h * 0.22f),
+                end = Offset(w * 0.42f, h * 0.78f),
+                strokeWidth = strokeW,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+
+    // ==========================================
+    // 8 Bespoke Social Platform Vector Icons
+    // ==========================================
+
+    @Composable
+    fun Instagram(
+        modifier: Modifier = Modifier,
+        size: Dp = 32.dp,
+        primaryColor: Color = Color(0xFFFF2E93),
+        accentColor: Color = Color(0xFFD946EF)
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.085f
+
+            // Outer squircle container
+            drawRoundRect(
+                color = primaryColor,
+                topLeft = Offset(w * 0.12f, h * 0.12f),
+                size = Size(w * 0.76f, h * 0.76f),
+                cornerRadius = CornerRadius(w * 0.24f, h * 0.24f),
+                style = Stroke(width = strokeW)
+            )
+
+            // Inner camera lens circle
+            drawCircle(
+                color = accentColor,
+                radius = w * 0.20f,
+                center = Offset(w * 0.50f, h * 0.50f),
+                style = Stroke(width = strokeW)
+            )
+
+            // Flash sensor dot
+            drawCircle(
+                color = Color.White,
+                radius = w * 0.045f,
+                center = Offset(w * 0.68f, h * 0.32f)
+            )
+        }
+    }
+
+    @Composable
+    fun GitHub(
+        modifier: Modifier = Modifier,
+        size: Dp = 32.dp,
+        primaryColor: Color = Color(0xFFF0F6FC),
+        accentColor: Color = AdfElectricCyan
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.08f
+
+            // Head & cat silhouette
+            val head = Path().apply {
+                moveTo(w * 0.20f, h * 0.50f)
+                cubicTo(w * 0.20f, h * 0.30f, w * 0.34f, h * 0.16f, w * 0.50f, h * 0.16f)
+                cubicTo(w * 0.66f, h * 0.16f, w * 0.80f, h * 0.30f, w * 0.80f, h * 0.50f)
+                cubicTo(w * 0.80f, h * 0.72f, w * 0.66f, h * 0.84f, w * 0.50f, h * 0.84f)
+                cubicTo(w * 0.34f, h * 0.84f, w * 0.20f, h * 0.72f, w * 0.20f, h * 0.50f)
+                close()
+            }
+            drawPath(head, color = primaryColor.copy(alpha = 0.15f), style = Fill)
+            drawPath(head, color = primaryColor, style = Stroke(width = strokeW, join = StrokeJoin.Round))
+
+            // Cat Ears
+            val earL = Path().apply {
+                moveTo(w * 0.28f, h * 0.34f)
+                lineTo(w * 0.22f, h * 0.18f)
+                lineTo(w * 0.38f, h * 0.22f)
+            }
+            drawPath(earL, color = primaryColor, style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+
+            val earR = Path().apply {
+                moveTo(w * 0.72f, h * 0.34f)
+                lineTo(w * 0.78f, h * 0.18f)
+                lineTo(w * 0.62f, h * 0.22f)
+            }
+            drawPath(earR, color = primaryColor, style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+
+            // Inner fork/branch anchor
+            drawLine(
+                color = accentColor,
+                start = Offset(w * 0.50f, h * 0.40f),
+                end = Offset(w * 0.50f, h * 0.72f),
+                strokeWidth = strokeW,
+                cap = StrokeCap.Round
+            )
+            drawCircle(color = accentColor, radius = w * 0.05f, center = Offset(w * 0.50f, h * 0.40f))
+            drawCircle(color = primaryColor, radius = w * 0.05f, center = Offset(w * 0.50f, h * 0.72f))
+        }
+    }
+
+    @Composable
+    fun LinkedIn(
+        modifier: Modifier = Modifier,
+        size: Dp = 32.dp,
+        primaryColor: Color = Color(0xFF00E5FF),
+        accentColor: Color = Color(0xFF2563EB)
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.085f
+
+            // Outer rounded tile
+            drawRoundRect(
+                color = accentColor.copy(alpha = 0.25f),
+                topLeft = Offset(w * 0.12f, h * 0.12f),
+                size = Size(w * 0.76f, h * 0.76f),
+                cornerRadius = CornerRadius(w * 0.20f, h * 0.20f),
+                style = Fill
+            )
+            drawRoundRect(
+                color = primaryColor,
+                topLeft = Offset(w * 0.12f, h * 0.12f),
+                size = Size(w * 0.76f, h * 0.76f),
+                cornerRadius = CornerRadius(w * 0.20f, h * 0.20f),
+                style = Stroke(width = strokeW)
+            )
+
+            // Letter 'i'
+            drawCircle(color = Color.White, radius = w * 0.045f, center = Offset(w * 0.32f, h * 0.34f))
+            drawLine(
+                color = Color.White,
+                start = Offset(w * 0.32f, h * 0.46f),
+                end = Offset(w * 0.32f, h * 0.70f),
+                strokeWidth = strokeW,
+                cap = StrokeCap.Round
+            )
+
+            // Letter 'n'
+            val nPath = Path().apply {
+                moveTo(w * 0.48f, h * 0.70f)
+                lineTo(w * 0.48f, h * 0.46f)
+                cubicTo(w * 0.48f, h * 0.40f, w * 0.56f, h * 0.40f, w * 0.62f, h * 0.46f)
+                lineTo(w * 0.62f, h * 0.70f)
+            }
+            drawPath(nPath, color = Color.White, style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+    }
+
+    @Composable
+    fun XTwitter(
+        modifier: Modifier = Modifier,
+        size: Dp = 32.dp,
+        primaryColor: Color = Color.White,
+        accentColor: Color = AdfElectricCyan
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.09f
+
+            // Primary diagonal bar
+            drawLine(
+                color = primaryColor,
+                start = Offset(w * 0.18f, h * 0.18f),
+                end = Offset(w * 0.82f, h * 0.82f),
+                strokeWidth = strokeW * 1.2f,
+                cap = StrokeCap.Round
+            )
+
+            // Crossing thin diagonal bar
+            drawLine(
+                color = accentColor,
+                start = Offset(w * 0.82f, h * 0.18f),
+                end = Offset(w * 0.18f, h * 0.82f),
+                strokeWidth = strokeW * 0.9f,
+                cap = StrokeCap.Round
+            )
+
+            // Center fusion core
+            drawCircle(color = primaryColor, radius = w * 0.06f, center = Offset(w * 0.50f, h * 0.50f))
+        }
+    }
+
+    @Composable
+    fun YouTube(
+        modifier: Modifier = Modifier,
+        size: Dp = 32.dp,
+        primaryColor: Color = Color(0xFFEF4444),
+        accentColor: Color = Color.White
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.085f
+
+            // Screen frame
+            drawRoundRect(
+                color = primaryColor.copy(alpha = 0.25f),
+                topLeft = Offset(w * 0.12f, h * 0.22f),
+                size = Size(w * 0.76f, h * 0.56f),
+                cornerRadius = CornerRadius(w * 0.18f, h * 0.18f),
+                style = Fill
+            )
+            drawRoundRect(
+                color = primaryColor,
+                topLeft = Offset(w * 0.12f, h * 0.22f),
+                size = Size(w * 0.76f, h * 0.56f),
+                cornerRadius = CornerRadius(w * 0.18f, h * 0.18f),
+                style = Stroke(width = strokeW)
+            )
+
+            // Play triangle
+            val play = Path().apply {
+                moveTo(w * 0.44f, h * 0.38f)
+                lineTo(w * 0.62f, h * 0.50f)
+                lineTo(w * 0.44f, h * 0.62f)
+                close()
+            }
+            drawPath(play, color = accentColor, style = Fill)
+        }
+    }
+
+    @Composable
+    fun WhatsApp(
+        modifier: Modifier = Modifier,
+        size: Dp = 32.dp,
+        primaryColor: Color = Color(0xFF10B981),
+        accentColor: Color = Color.White
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.085f
+
+            // Speech bubble outline with tail
+            val bubble = Path().apply {
+                moveTo(w * 0.50f, h * 0.14f)
+                cubicTo(w * 0.72f, h * 0.14f, w * 0.86f, h * 0.28f, w * 0.86f, h * 0.48f)
+                cubicTo(w * 0.86f, h * 0.68f, w * 0.72f, h * 0.82f, w * 0.50f, h * 0.82f)
+                lineTo(w * 0.26f, h * 0.88f)
+                lineTo(w * 0.30f, h * 0.72f)
+                cubicTo(w * 0.18f, h * 0.66f, w * 0.14f, h * 0.58f, w * 0.14f, h * 0.48f)
+                cubicTo(w * 0.14f, h * 0.28f, w * 0.28f, h * 0.14f, w * 0.50f, h * 0.14f)
+                close()
+            }
+            drawPath(bubble, color = primaryColor.copy(alpha = 0.2f), style = Fill)
+            drawPath(bubble, color = primaryColor, style = Stroke(width = strokeW, join = StrokeJoin.Round))
+
+            // Telephone handset arc
+            val phone = Path().apply {
+                moveTo(w * 0.38f, h * 0.38f)
+                cubicTo(w * 0.42f, h * 0.46f, w * 0.54f, h * 0.58f, w * 0.62f, h * 0.62f)
+            }
+            drawPath(phone, color = accentColor, style = Stroke(width = strokeW * 1.2f, cap = StrokeCap.Round))
+            drawCircle(color = accentColor, radius = w * 0.05f, center = Offset(w * 0.38f, h * 0.38f))
+            drawCircle(color = accentColor, radius = w * 0.05f, center = Offset(w * 0.62f, h * 0.62f))
+        }
+    }
+
+    @Composable
+    fun Facebook(
+        modifier: Modifier = Modifier,
+        size: Dp = 32.dp,
+        primaryColor: Color = Color(0xFF3B82F6),
+        accentColor: Color = Color.White
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.085f
+
+            // Outer rounded tile
+            drawRoundRect(
+                color = primaryColor.copy(alpha = 0.25f),
+                topLeft = Offset(w * 0.12f, h * 0.12f),
+                size = Size(w * 0.76f, h * 0.76f),
+                cornerRadius = CornerRadius(w * 0.22f, h * 0.22f),
+                style = Fill
+            )
+            drawRoundRect(
+                color = primaryColor,
+                topLeft = Offset(w * 0.12f, h * 0.12f),
+                size = Size(w * 0.76f, h * 0.76f),
+                cornerRadius = CornerRadius(w * 0.22f, h * 0.22f),
+                style = Stroke(width = strokeW)
+            )
+
+            // Letter 'f'
+            val fPath = Path().apply {
+                moveTo(w * 0.64f, h * 0.32f)
+                cubicTo(w * 0.56f, h * 0.32f, w * 0.50f, h * 0.36f, w * 0.50f, h * 0.44f)
+                lineTo(w * 0.50f, h * 0.76f)
+            }
+            drawPath(fPath, color = accentColor, style = Stroke(width = strokeW * 1.1f, cap = StrokeCap.Round))
+            drawLine(
+                color = accentColor,
+                start = Offset(w * 0.38f, h * 0.48f),
+                end = Offset(w * 0.62f, h * 0.48f),
+                strokeWidth = strokeW * 1.1f,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+
+    @Composable
+    fun Reddit(
+        modifier: Modifier = Modifier,
+        size: Dp = 32.dp,
+        primaryColor: Color = Color(0xFFFF5722),
+        accentColor: Color = Color.White
+    ) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = w * 0.08f
+
+            // Snoo oval head
+            drawOval(
+                color = primaryColor.copy(alpha = 0.2f),
+                topLeft = Offset(w * 0.20f, h * 0.34f),
+                size = Size(w * 0.60f, h * 0.44f),
+                style = Fill
+            )
+            drawOval(
+                color = primaryColor,
+                topLeft = Offset(w * 0.20f, h * 0.34f),
+                size = Size(w * 0.60f, h * 0.44f),
+                style = Stroke(width = strokeW)
+            )
+
+            // Left & Right ears
+            drawCircle(color = primaryColor, radius = w * 0.07f, center = Offset(w * 0.18f, h * 0.54f))
+            drawCircle(color = primaryColor, radius = w * 0.07f, center = Offset(w * 0.82f, h * 0.54f))
+
+            // Antenna
+            val ant = Path().apply {
+                moveTo(w * 0.50f, h * 0.34f)
+                lineTo(w * 0.56f, h * 0.18f)
+                lineTo(w * 0.68f, h * 0.22f)
+            }
+            drawPath(ant, color = primaryColor, style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawCircle(color = primaryColor, radius = w * 0.05f, center = Offset(w * 0.70f, h * 0.22f))
+
+            // Eyes
+            drawCircle(color = primaryColor, radius = w * 0.05f, center = Offset(w * 0.38f, h * 0.54f))
+            drawCircle(color = primaryColor, radius = w * 0.05f, center = Offset(w * 0.62f, h * 0.54f))
+
+            // Smile
+            val smile = Path().apply {
+                moveTo(w * 0.40f, h * 0.66f)
+                cubicTo(w * 0.46f, h * 0.72f, w * 0.54f, h * 0.72f, w * 0.60f, h * 0.66f)
+            }
+            drawPath(smile, color = accentColor, style = Stroke(width = strokeW, cap = StrokeCap.Round))
         }
     }
 }
