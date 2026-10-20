@@ -1,39 +1,20 @@
-# Third-Party Links, Embeds and Services
+# ADF AIO — Third-Party Services and External Links
 
-**Effective date:** [PLACEHOLDER: YYYY-MM-DD]
+**Last updated:** 20 October 2026  
+**Contact:** ishantkohlikohli@gmail.com
 
-ADF AIO may provide links to external platforms and may, depending on the implementation, display third-party embedded content. This document explains the distinction and provides an inventory to complete before publication.
+This document distinguishes code integrations from external links. A dependency’s presence alone does not prove it is initialized or sends data.
 
-## 1. External links versus embeds
+## Google Gemini API — implementation present; release status unresolved
+`GeminiClient.kt` constructs requests to `generativelanguage.googleapis.com`, and the document view model calls the AI client. The request includes a document title, an excerpt of up to 6,000 characters, the user's question, and up to four previous exchanges. The owner has said the intended AI provider is “none”; whether this integration is active in the distributed app is **unverified**. If active, disclose the transfer clearly before users invoke the feature and provide the applicable Google privacy information.
 
-- **External link:** opens a third-party website when a user chooses to click it. The destination may then collect information under its own policies.
-- **Embedded content:** loads content from another provider inside the App, such as a video player, social post, map, or widget. The provider may receive technical information as soon as the embed loads, even if the user does not interact with it.
+## Firebase libraries — activity unverified
+Firebase-related dependencies appear in Gradle configuration. This review did not establish that Analytics or Crashlytics is initialized. Verify the release build and network traffic before describing either as active.
 
-A social-media icon that only links to a platform is not the same as an embedded social-media widget.
+## External links
+The app contains links to the operator’s website and social platforms including Instagram, GitHub, LinkedIn, X, WhatsApp, Reddit, YouTube, and Facebook. These are links; they are not by themselves proof of embedded trackers. Destination providers may process information when users open the links.
 
-## 2. Provider inventory
+## Website embeds and hosting
+The live website, hosting/CDN, scripts, and embeds have not been independently audited. Do not list providers merely because the app links to them. Update this document if a webview, embed, analytics SDK, crash SDK, advertising SDK, or other provider is enabled.
 
-List only providers actually loaded by the deployed app.
-
-| Provider | How it is used | Link or embed? | Data potentially received | Privacy / terms URL |
-|---|---|---|---|---|
-| Instagram / Meta | [PLACEHOLDER: actual use] | [Link/embed] | [Verify] | [Add current official policy URL] |
-| GitHub | [PLACEHOLDER: actual use] | [Link/embed] | [Verify] | [Add current official policy URL] |
-| LinkedIn | [PLACEHOLDER: actual use] | [Link/embed] | [Verify] | [Add current official policy URL] |
-| X | [PLACEHOLDER: actual use] | [Link/embed] | [Verify] | [Add current official policy URL] |
-| YouTube / Google | [PLACEHOLDER: actual use] | [Link/embed] | [Verify] | [Add current official policy URL] |
-| WhatsApp / Meta | [PLACEHOLDER: actual use] | [Link/embed] | [Verify] | [Add current official policy URL] |
-| Facebook / Meta | [PLACEHOLDER: actual use] | [Link/embed] | [Verify] | [Add current official policy URL] |
-| Reddit | [PLACEHOLDER: actual use] | [Link/embed] | [Verify] | [Add current official policy URL] |
-| Hosting / CDN | [PLACEHOLDER: provider] | [Service] | [Verify logs and metadata] | [Add current official policy URL] |
-| Analytics / error reporting | [PLACEHOLDER: if any] | [Script/service] | [Verify] | [Add current official policy URL] |
-
-## 3. Consent and privacy
-
-Where required, delay optional third-party embeds until the user consents or clicks to load them. Consider a privacy-preserving placeholder that explains which provider will load and lets the user choose to proceed.
-
-Do not claim that third-party providers receive no data unless the implementation and provider documentation support that claim.
-
-## 4. Provider changes
-
-The inventory should be reviewed whenever a provider, script, embed, API, analytics tool, or hosting service is added or removed.
+Contact: **ishantkohlikohli@gmail.com**

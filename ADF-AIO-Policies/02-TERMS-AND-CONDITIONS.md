@@ -4,7 +4,7 @@
 **Effective date:** [PLACEHOLDER: YYYY-MM-DD]  
 **Last updated:** [PLACEHOLDER: YYYY-MM-DD]
 
-These Terms and Conditions (“Terms”) govern your access to and use of ADF AIO (“the App”), operated by [PLACEHOLDER: legal name or business name] (“we,” “us,” or “our”). By accessing or using the App, you agree to these Terms. If you do not agree, do not use the App.
+These Terms and Conditions (“Terms”) govern your access to and use of ADF AIO (“the App”), operated by Ishant Kohli (separate registered business entity not confirmed) (“we,” “us,” or “our”). By accessing or using the App, you agree to these Terms. If you do not agree, do not use the App.
 
 ## 1. The service
 
@@ -30,7 +30,7 @@ Additional requirements appear in the Acceptable Use Policy.
 
 ## 4. Intellectual property and source code
 
-Unless expressly stated otherwise in a separate written license, the App's original source code, design, branding, layout, original graphics, and documentation are owned by or licensed to [PLACEHOLDER: rights holder] and are protected by applicable intellectual-property laws.
+Unless expressly stated otherwise in a separate written license, the App's original source code, design, branding, layout, original graphics, and documentation are owned by or licensed to Ishant Kohli and are protected by applicable intellectual-property laws.
 
 You may use the publicly available, pre-built App for its intended purpose, subject to these Terms. Access to the App does **not** grant permission to copy, redistribute, publish, sublicense, sell, modify, create derivative applications from, or commercially exploit its source code or proprietary assets.
 
@@ -56,7 +56,7 @@ Nothing in these Terms excludes a consumer right or liability that cannot legall
 
 ## 9. Limitation of liability
 
-To the maximum extent permitted by applicable law, [PLACEHOLDER: rights holder] will not be liable for indirect, incidental, special, consequential, or punitive losses arising from use of the App. Any other limitation of liability must be reviewed for enforceability in the relevant jurisdiction. These Terms do not exclude liability that cannot lawfully be excluded.
+To the maximum extent permitted by applicable law, Ishant Kohli will not be liable for indirect, incidental, special, consequential, or punitive losses arising from use of the App. Any other limitation of liability must be reviewed for enforceability in the relevant jurisdiction. These Terms do not exclude liability that cannot lawfully be excluded.
 
 ## 10. Suspension or termination
 
@@ -76,6 +76,9 @@ These Terms are governed by the laws of [PLACEHOLDER: jurisdiction], excluding c
 
 ## 14. Contact
 
-Operator: [PLACEHOLDER: legal name or business name]  
-Email: [PLACEHOLDER: contact email]  
-Website: [PLACEHOLDER: canonical app URL]
+Operator: Ishant Kohli (separate registered business entity not confirmed)  
+Email: ishantkohlikohli@gmail.com  
+Website: https://ishantkohli.me
+
+
+> **Publication note:** Confirm remaining bracketed items, including venue/jurisdiction, and obtain legal review before publication.

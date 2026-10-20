@@ -1,49 +1,25 @@
-# Security, Retention and Deletion
+# ADF AIO — Security and Data Retention
 
-**Last updated:** [PLACEHOLDER: YYYY-MM-DD]
+**Last updated:** 20 October 2026  
+**Operator:** Ishant Kohli  
+**Contact:** ishantkohlikohli@gmail.com
 
-This document describes the operational commitments for ADF AIO. Publish only the practices that have actually been implemented.
+## Source findings
+- Local document and annotation data models and a Room database are present.
+- Internet and broad storage permissions are requested.
+- The owner reports Android backup is disabled, but the manifest uses `android:allowBackup="true"` and references backup-rule files without explicit exclusions. Correct and test this discrepancy before release.
+- A Gemini API integration exists in source, although the owner says no AI provider is intended. Confirm that it is disabled/removed or disclose it and secure the integration.
+- Analytics/crash-reporting configuration is unverified.
 
-## 1. Security measures
+## Retention
+No verified fixed retention periods are available for local records, temporary files, exports, logs, or provider-side processing. Do not publish specific periods until established. Document how users can delete documents and app data.
 
-Document the safeguards currently in use, such as:
+## Recommended actions
+1. Configure and test Android backup behavior on supported versions.
+2. Minimize storage permissions; consider Android’s document picker where feasible.
+3. Do not embed a reusable secret API key in a public mobile app. Use a backend and restrict credentials if remote AI is enabled.
+4. Verify release-build network traffic and remove unused SDKs.
+5. Test deletion of local documents, annotations, caches, temporary files, and exports.
+6. Maintain a dependency inventory and a security response process.
 
-- HTTPS/TLS for supported network connections.
-- Access restrictions for administrative tools and repositories.
-- Secure handling of API keys and secrets outside public client-side code where possible.
-- Dependency updates and vulnerability review.
-- Input validation and safe output rendering.
-- Backups and recovery measures, if implemented.
-- Access controls and retention limits for logs and form submissions.
-
-Do not list a measure as active until it has been verified.
-
-## 2. Data minimization
-
-Collect only the information necessary for a clearly defined purpose. Avoid collecting sensitive information unless it is necessary, lawful, and protected appropriately.
-
-## 3. Retention schedule
-
-| Data | Retention | Deletion method / notes |
-|---|---|---|
-| Form submissions | [PLACEHOLDER] | [PLACEHOLDER] |
-| Server/security logs | [PLACEHOLDER] | [PLACEHOLDER] |
-| Consent records | [PLACEHOLDER] | [PLACEHOLDER] |
-| Account data, if applicable | [PLACEHOLDER] | [PLACEHOLDER] |
-| Backups, if applicable | [PLACEHOLDER] | [PLACEHOLDER] |
-
-## 4. User requests
-
-Users can request access, correction, or deletion by contacting [PLACEHOLDER: privacy email]. Explain any identity verification, response timeline, legal exceptions, and backup deletion limitations once confirmed.
-
-## 5. Security reports
-
-Report suspected vulnerabilities to [PLACEHOLDER: security email]. Please include steps to reproduce and avoid accessing, altering, or disclosing other users' information. Do not publish sensitive details before a reasonable opportunity to investigate.
-
-## 6. Incidents
-
-Maintain an internal process to assess, contain, investigate, document, and respond to suspected data breaches. Notify affected individuals and authorities when required by applicable law.
-
-## 7. No absolute security guarantee
-
-No system can be guaranteed perfectly secure. Avoid absolute promises such as “100% secure” or “we can never be breached.”
+This draft is not a certification that the app is secure.

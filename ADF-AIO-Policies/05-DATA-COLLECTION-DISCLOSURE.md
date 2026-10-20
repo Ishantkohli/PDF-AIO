@@ -1,42 +1,31 @@
-# What Data Does ADF AIO Collect?
+# ADF AIO — Data Collection Disclosure
 
-**Last verified:** [PLACEHOLDER: YYYY-MM-DD]  
-**Owner:** [PLACEHOLDER: legal name or business name]
+**Last reviewed:** 20 October 2026  
+**Operator:** Ishant Kohli  
+**Website:** https://ishantkohli.me  
+**Contact:** ishantkohlikohli@gmail.com  
+**Jurisdiction stated by operator:** India
 
-This page is intended to give users a plain-language explanation of data practices. Complete it only after reviewing the deployed app, source code, hosting configuration, network requests, and all third-party providers.
+This disclosure reflects a static source review and owner answers. It is not a production-build or packet-capture audit.
 
-## Data inventory
+| Category | Finding | Notes |
+|---|---|---|
+| Accounts | No account requirement found | Recheck if sign-in is added |
+| Documents/files | Local selection, scanning, conversion, annotation, and export code exists | Broad storage permission requested; scope depends on OS and user permission |
+| Local records | Room database and document/annotation models exist | Exact stored fields and deletion behavior need verification |
+| General server uploads | Not established by this review | No general document-upload endpoint was confirmed |
+| AI analysis | Gemini API implementation exists; activation conflicts with owner answer “AI provider: none” | If active, title, up to 6,000 characters of excerpt, question, and up to four previous exchanges are sent to Google |
+| Analytics | Unverified | Owner unsure; dependencies alone do not prove collection |
+| Crash reporting | Unverified | Check SDK initialization and release network traffic |
+| Website cookies/analytics | Owner says none; not independently verified | Audit the live website and hosting setup |
+| Android backup | Owner says disabled; source manifest sets `allowBackup=true` | Resolve before release |
+| External links | Social and website links exist | Third-party processing may occur after a link is opened |
+| Location | No location collection established in this review | Verify all permissions and runtime behavior |
+| Forms/support/payment | Not established by this Android source review | Check website and other deployed services |
 
-| Data category | Collected? | Why | Where stored / recipient | Retention |
-|---|---|---|---|---|
-| Contact or feedback form details | [Yes/No/Feature-dependent] | Respond to requests | [Provider/system] | [Period] |
-| Account details | [Yes/No] | Authentication/account operation | [Provider/system] | [Period] |
-| Device/browser information | [Yes/No/Provider-dependent] | Compatibility/security | [Provider/system] | [Period] |
-| Server/security logs | [Yes/No/Hosting-dependent] | Security and troubleshooting | [Hosting provider] | [Period] |
-| Cookies/local/session storage | [Yes/No; list names] | [Purpose] | User's browser / provider | [Duration] |
-| Analytics events | [Yes/No] | [Purpose] | [Analytics provider] | [Period] |
-| Location data | [Yes/No] | [Purpose, if any] | [Recipient] | [Period] |
-| Uploaded files | [Yes/No] | [Feature purpose] | [Storage provider] | [Period] |
-| Payment data | [Yes/No] | [Purpose, if applicable] | [Payment provider] | [Period] |
-| Consent records | [Yes/No] | Record privacy choices | [System] | [Period] |
-
-## Information we do not intentionally request
-
-List information the app does not need and should not ask users to submit, such as passwords for unrelated third-party accounts, government ID numbers, or sensitive personal details. Do not promise that such information can never appear in technical logs unless verified.
-
-## External platforms
-
-If a user clicks an Instagram, GitHub, LinkedIn, X, YouTube, WhatsApp, Facebook, Reddit, or other external link, the destination platform may process data according to its own policies. A simple outbound link is different from an embedded widget; document the actual behavior.
-
-## How to request access or deletion
-
-Contact [PLACEHOLDER: privacy email] with a description of your request. We may need to verify your identity and may retain certain records where law permits or requires it.
-
-## Audit notes before publication
-
-1. Inspect frontend code for `fetch`, form submissions, analytics tags, pixels, external scripts, and embeds.
-2. Inspect cookies, local storage, session storage, IndexedDB, and service workers.
-3. Review hosting/CDN/server logs and their retention.
-4. Review API providers and processors.
-5. Test the app in a fresh browser profile and inspect network traffic.
-6. Update every table entry to reflect actual behavior.
+## Release checks
+- Resolve the Gemini implementation/owner-confirmation conflict.
+- Verify analytics and crash reporting.
+- Resolve Android backup configuration.
+- Inspect website cookies, scripts, embeds, logs, and network traffic.
+- Verify local deletion, temporary-file handling, intended age range, and actual retention periods.

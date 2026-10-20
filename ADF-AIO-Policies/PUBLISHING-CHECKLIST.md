@@ -1,3 +1,5 @@
+> **Source-audit hold (20 October 2026):** Do not publish until Gemini status, Android backup behavior, analytics/crash reporting, and live website cookies/scripts are verified. See `SOURCE-CODE-AUDIT-NOTES.md`.
+
 # ADF AIO — Publishing Checklist
 
 Complete this checklist before making the legal pages public.
