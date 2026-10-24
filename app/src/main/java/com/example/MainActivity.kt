@@ -28,6 +28,7 @@ import com.example.ui.components.RealTimeFpsHud
 import com.example.ui.screens.BootupShowcaseScreen
 import com.example.ui.screens.ConversionHubScreen
 import com.example.ui.screens.CreditScreen
+import com.example.ui.screens.DocumentScannerScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.PageManagerScreen
 import com.example.ui.screens.ReaderScreen
@@ -49,11 +50,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             AcrobatTheme {
                 val viewModel: PdfViewModel = viewModel()
+                val updateViewModel: com.example.update.UpdateViewModel = viewModel()
                 val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
                 val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
+                val updateMessage by updateViewModel.userMessage.collectAsStateWithLifecycle()
                 val showFpsHud by viewModel.showFpsHud.collectAsStateWithLifecycle()
                 val snackbarHostState = remember { SnackbarHostState() }
                 val scope = rememberCoroutineScope()
+                val context = androidx.compose.ui.platform.LocalContext.current
+
+                // Background check for PDF AIO app updates on startup
+                LaunchedEffect(Unit) {
+                    updateViewModel.checkForUpdates(context, manual = false)
+                }
 
                 // Global BackHandler: Navigate back to Home from secondary tabs
                 if (currentScreen in listOf(AppScreen.CONVERSION_HUB, AppScreen.SIGNATURE_VAULT, AppScreen.CREDITS)) {
@@ -72,9 +81,34 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Handle intent when opening PDF from outside
+                // Handle update messages
+                LaunchedEffect(updateMessage) {
+                    updateMessage?.let { msg ->
+                        scope.launch {
+                            snackbarHostState.showSnackbar(msg)
+                            updateViewModel.clearUserMessage()
+                        }
+                    }
+                }
+
+                // Handle intent when opening PDF from outside or tapping update notification
                 LaunchedEffect(intent) {
-                    handleIntent(intent, viewModel)
+                    handleIntent(intent, viewModel, updateViewModel)
+                }
+
+                // Request notification permission on Android 13+ (API 33+)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+                    ) { isGranted ->
+                        android.util.Log.d("MainActivity", "POST_NOTIFICATIONS permission: $isGranted")
+                    }
+
+                    LaunchedEffect(Unit) {
+                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
                 }
 
                 Scaffold(
@@ -119,6 +153,32 @@ class MainActivity : ComponentActivity() {
                                         unselectedTextColor = AdfTextMuted
                                     ),
                                     modifier = Modifier.testTag("nav_tab_documents")
+                                )
+                                NavigationBarItem(
+                                    selected = currentScreen == AppScreen.SCANNER,
+                                    onClick = { viewModel.navigateTo(AppScreen.SCANNER) },
+                                    icon = {
+                                        AdfIcon.Camera(
+                                            size = 20.dp,
+                                            primaryColor = if (currentScreen == AppScreen.SCANNER) AdfElectricCyan else AdfTextMuted,
+                                            accentColor = if (currentScreen == AppScreen.SCANNER) AdfCoral else AdfTextMuted
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = "Scan",
+                                            fontSize = 11.sp,
+                                            fontWeight = if (currentScreen == AppScreen.SCANNER) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = AdfElectricCyan,
+                                        selectedTextColor = AdfElectricCyan,
+                                        indicatorColor = AdfElectricCyan.copy(alpha = 0.15f),
+                                        unselectedIconColor = AdfTextMuted,
+                                        unselectedTextColor = AdfTextMuted
+                                    ),
+                                    modifier = Modifier.testTag("nav_tab_scan")
                                 )
                                 NavigationBarItem(
                                     selected = currentScreen == AppScreen.CONVERSION_HUB,
@@ -219,7 +279,11 @@ class MainActivity : ComponentActivity() {
                                     viewModel = viewModel,
                                     onFinishBootup = { viewModel.navigateTo(AppScreen.HOME) }
                                 )
-                                AppScreen.HOME -> HomeScreen(viewModel = viewModel)
+                                AppScreen.HOME -> HomeScreen(viewModel = viewModel, updateViewModel = updateViewModel)
+                                AppScreen.SCANNER -> DocumentScannerScreen(
+                                    viewModel = viewModel,
+                                    onBack = { viewModel.navigateTo(AppScreen.HOME) }
+                                )
                                 AppScreen.CONVERSION_HUB -> ConversionHubScreen(
                                     viewModel = viewModel,
                                     onSelectConversion = { targetTab ->
@@ -234,6 +298,7 @@ class MainActivity : ComponentActivity() {
                                 AppScreen.PAGE_MANAGER -> PageManagerScreen(viewModel = viewModel)
                                 AppScreen.CREDITS -> CreditScreen(
                                     viewModel = viewModel,
+                                    updateViewModel = updateViewModel,
                                     onBack = { viewModel.navigateTo(AppScreen.HOME) }
                                 )
                             }
@@ -247,6 +312,9 @@ class MainActivity : ComponentActivity() {
                                     .padding(top = 48.dp, end = 16.dp)
                             )
                         }
+
+                        // In-App Update Dialogs & Download Progress Overlay Host
+                        com.example.update.UpdateOverlayHost(viewModel = updateViewModel)
                     }
                 }
             }
@@ -263,8 +331,20 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
     }
 
-    private fun handleIntent(intent: Intent?, viewModel: PdfViewModel) {
-        val uri = intent?.data ?: return
+    private fun handleIntent(
+        intent: Intent?,
+        viewModel: PdfViewModel,
+        updateViewModel: com.example.update.UpdateViewModel? = null
+    ) {
+        if (intent == null) return
+
+        // Handle notification tap to automatically open update dialog
+        if (intent.getBooleanExtra("open_update_dialog", false) || intent.action == "ACTION_OPEN_UPDATE_DIALOG") {
+            updateViewModel?.checkForUpdates(this, manual = true)
+            return
+        }
+
+        val uri = intent.data ?: return
         if (intent.action == Intent.ACTION_VIEW || intent.type == "application/pdf") {
             viewModel.importPdfFromUri(uri)
         }

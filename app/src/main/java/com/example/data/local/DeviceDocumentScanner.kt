@@ -47,9 +47,24 @@ object DeviceDocumentScanner {
     private const val TAG = "DeviceDocumentScanner"
 
     /**
-     * Checks if the app has permission to scan the entire device storage.
+     * Checks if the app has permission to scan the entire device storage,
+     * or if the user has already granted permanent/one-time access.
      */
     fun hasStoragePermission(context: Context): Boolean {
+        // 1. If user previously granted a persistable SAF tree URI or document URI
+        try {
+            if (context.contentResolver.persistedUriPermissions.any { it.isReadPermission }) {
+                return true
+            }
+        } catch (ignored: Exception) {}
+
+        // 2. Check persistent SharedPreferences to ensure one-time permission flow (never nag user again)
+        val prefs = context.getSharedPreferences("pdf_aio_storage_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("perm_granted_or_acknowledged", false)) {
+            return true
+        }
+
+        // 3. System level check
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 Environment.isExternalStorageManager()
@@ -61,6 +76,40 @@ object DeviceDocumentScanner {
                 context,
                 android.Manifest.permission.READ_EXTERNAL_STORAGE
             ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    /**
+     * Records that the user has granted or acknowledged storage access once.
+     */
+    fun recordStoragePermissionGranted(context: Context) {
+        context.getSharedPreferences("pdf_aio_storage_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("perm_granted_or_acknowledged", true)
+            .apply()
+    }
+
+    /**
+     * Saves a granted SAF tree URI to SharedPreferences so it automatically loads across app restarts.
+     */
+    fun savePersistedTreeUri(context: Context, uri: Uri) {
+        context.getSharedPreferences("pdf_aio_storage_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putString("saved_tree_uri", uri.toString())
+            .putBoolean("perm_granted_or_acknowledged", true)
+            .apply()
+    }
+
+    /**
+     * Retrieves the saved SAF tree URI from SharedPreferences.
+     */
+    fun getPersistedTreeUri(context: Context): Uri? {
+        val uriStr = context.getSharedPreferences("pdf_aio_storage_prefs", Context.MODE_PRIVATE)
+            .getString("saved_tree_uri", null) ?: return null
+        return try {
+            Uri.parse(uriStr)
+        } catch (e: Exception) {
+            null
         }
     }
 

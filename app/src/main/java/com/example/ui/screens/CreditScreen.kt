@@ -40,9 +40,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.BuildConfig
 import com.example.ui.PdfViewModel
 import com.example.ui.components.AdfIcon
 import com.example.ui.theme.*
+import com.example.update.UpdateState
+import com.example.update.UpdateViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.cos
@@ -67,6 +75,7 @@ data class SocialPlatformInfo(
 @Composable
 fun CreditScreen(
     viewModel: PdfViewModel,
+    updateViewModel: UpdateViewModel? = null,
     onBack: () -> Unit
 ) {
     BackHandler { onBack() }
@@ -171,6 +180,19 @@ fun CreditScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(top = 10.dp, bottom = 48.dp)
             ) {
+                // Section 0: Check For Update at the Top of Developer Section
+                item {
+                    DeveloperUpdateCard(
+                        updateViewModel = updateViewModel,
+                        onCheckUpdate = {
+                            updateViewModel?.checkForUpdates(context, manual = true)
+                        },
+                        onOpenSettings = {
+                            updateViewModel?.openSettingsDialog()
+                        }
+                    )
+                }
+
                 // Section 1: Developer Credentials Banner
                 item {
                     DeveloperCredentialsCard(
@@ -414,7 +436,7 @@ fun CreditScreen(
                             Spacer(modifier = Modifier.height(10.dp))
 
                             val specs = listOf(
-                                "Application Name" to "ADF AIO (All-In-One)",
+                                "Application Name" to "PDF AIO (All-In-One)",
                                 "Lead Architect" to "Ishant Kohli",
                                 "Engineering Partner" to "Google AI Studio",
                                 "Official Build Date" to "10/10/2026",
@@ -485,7 +507,7 @@ fun DeveloperCredentialsCard(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "ADF AIO OFFICIAL",
+                            text = "PDF AIO OFFICIAL",
                             color = AdfElectricCyan,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -801,3 +823,154 @@ fun DrawScope.drawElectricalBorders(
     drawCircle(color = Color.White, radius = 2.5.dp.toPx(), center = Offset(botSparkX, h - 1.dp.toPx()))
     drawCircle(color = Color(0xFF00E5FF).copy(alpha = 0.5f), radius = 5.dp.toPx(), center = Offset(botSparkX, h - 1.dp.toPx()))
 }
+
+/**
+ * Check For Update Card at the top of the Developer / Credits section
+ */
+@Composable
+fun DeveloperUpdateCard(
+    updateViewModel: UpdateViewModel?,
+    onCheckUpdate: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    val updateState = updateViewModel?.updateState?.collectAsStateWithLifecycle()?.value ?: UpdateState.Idle
+    val isChecking = updateState is UpdateState.Checking
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = AdfObsidianSurface,
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = Brush.horizontalGradient(
+                listOf(AdfEmeraldGreen.copy(alpha = 0.6f), AdfElectricCyan.copy(alpha = 0.6f))
+            )
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("developer_check_for_update_card")
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(AdfEmeraldGreen.copy(alpha = 0.2f), AdfElectricCyan.copy(alpha = 0.2f))
+                                )
+                            )
+                            .border(1.dp, AdfEmeraldGreen.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SystemUpdate,
+                            contentDescription = null,
+                            tint = AdfEmeraldGreen,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Check For Update",
+                                color = AdfTextPrimary,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = AdfEmeraldGreen.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "v${BuildConfig.VERSION_NAME}",
+                                    color = AdfEmeraldGreen,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "GitHub Releases OTA • Auto-Install",
+                            color = AdfTextSecondary,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .testTag("developer_update_settings_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Update Settings",
+                        tint = AdfTextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Main "Check For Update" Button
+            Button(
+                onClick = onCheckUpdate,
+                enabled = !isChecking,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .testTag("developer_check_for_update_button"),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = CrimsonPrimary,
+                    contentColor = Color.White,
+                    disabledContainerColor = CrimsonPrimary.copy(alpha = 0.5f),
+                    disabledContentColor = Color.White.copy(alpha = 0.7f)
+                )
+            ) {
+                if (isChecking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Checking GitHub...",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.5.sp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Check For Update",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.5.sp
+                    )
+                }
+            }
+        }
+    }
+}
+

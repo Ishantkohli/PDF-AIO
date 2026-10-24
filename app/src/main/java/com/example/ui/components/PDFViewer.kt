@@ -352,7 +352,7 @@ fun PDFViewer(
     }
 
     // Outer Container with optional horizontal swipe detection
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .background(backgroundColor)
             .then(
@@ -463,15 +463,16 @@ fun PDFViewer(
                     customCanvasOverlay?.invoke(this, dstW, dstH, scale)
                 }
 
-                // Interactive Multi-Page Navigation Bar Overlay
-                if (enablePageNavigation && state.pageCount > 1) {
+                // Interactive Multi-Page Navigation Bar Overlay (strictly excluded from compact or thumbnail displays)
+                val isThumbnailOrCompact = maxWidth < 140.dp || maxHeight < 140.dp
+                if (enablePageNavigation && !isThumbnailOrCompact && state.pageCount > 1) {
                     PdfPageNavigationBar(
                         state = state,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 10.dp)
                     )
-                } else if (showPageBadge && state.pageCount > 0) {
+                } else if (showPageBadge && !isThumbnailOrCompact && state.pageCount > 0) {
                     // Simple static page indicator when navigation is not active
                     Surface(
                         shape = RoundedCornerShape(6.dp),

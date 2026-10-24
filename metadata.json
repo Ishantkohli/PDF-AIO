@@ -1,6 +1,6 @@
 {
-  "name": "ADF AIO",
-  "description": "All-in-one professional PDF reader, editor, document converter, digital signature vault, watermark studio, and AI assistant.",
+  "name": "PDF AIO",
+  "description": "All-in-one professional PDF reader, editor, document scanner, converter, digital signature vault, and watermark studio.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

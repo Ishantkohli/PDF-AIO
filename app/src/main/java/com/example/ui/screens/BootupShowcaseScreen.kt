@@ -171,16 +171,16 @@ fun BootupShowcaseScreen(
             ),
             ShowcaseFeature(
                 stageNumber = 5,
-                title = "Gemini AI Document Intelligence",
-                badge = "AI COPILOT",
-                subtitle = "Extract deep insights, summaries, and answers in seconds",
-                icon = Icons.Default.AutoAwesome,
+                title = "100% Offline & Private Local Engine",
+                badge = "OFFLINE & SECURE",
+                subtitle = "Zero cloud dependencies, zero external tracking, 100% on-device",
+                icon = Icons.Default.Shield,
                 accentColor = Color(0xFF10B981),
                 capabilities = listOf(
-                    "Instant executive summaries for long contracts & reports",
-                    "Contextual semantic search & key term extraction",
-                    "Citation-friendly reasoning engine with markdown breakdown",
-                    "Offline-first document caching and zero cloud latency"
+                    "Draw & Type Digital Signatures with custom cursive styles",
+                    "Directly stamp signatures onto any page of active PDFs",
+                    "Instant on-device Word-to-PDF & Image-to-PDF conversion",
+                    "Zero data leaves your device — complete privacy guaranteed"
                 )
             )
         )
