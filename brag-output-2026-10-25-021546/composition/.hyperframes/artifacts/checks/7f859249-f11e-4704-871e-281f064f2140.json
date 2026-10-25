@@ -1,0 +1,739 @@
+{
+  "ok": true,
+  "strict": false,
+  "browserSkipped": false,
+  "lint": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 4,
+    "infoCount": 0,
+    "findings": [
+      {
+        "code": "nested_structure_needs_subcomposition",
+        "severity": "warning",
+        "message": "<div id=\"scene-1\"> is a timeline element that contains nested <div id=\"s1-badge\">. The timeline shows one row per top-level element, and the root composition is built only from sub-compositions.",
+        "selector": "#scene-1",
+        "dataAttributes": {},
+        "sourceFile": "C:\\Users\\khushi kohli\\Desktop\\ishu github\\PDF-AIO\\brag-output-2026-10-25-021546\\composition\\index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Move <div id=\"scene-1\"> and its contents into a sub-composition file and mount it with data-composition-src."
+      },
+      {
+        "code": "nested_structure_needs_subcomposition",
+        "severity": "warning",
+        "message": "<div id=\"scene-2\"> is a timeline element that contains nested <div id=\"s2-badge\">. The timeline shows one row per top-level element, and the root composition is built only from sub-compositions.",
+        "selector": "#scene-2",
+        "dataAttributes": {},
+        "sourceFile": "C:\\Users\\khushi kohli\\Desktop\\ishu github\\PDF-AIO\\brag-output-2026-10-25-021546\\composition\\index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Move <div id=\"scene-2\"> and its contents into a sub-composition file and mount it with data-composition-src."
+      },
+      {
+        "code": "nested_structure_needs_subcomposition",
+        "severity": "warning",
+        "message": "<div id=\"scene-3\"> is a timeline element that contains nested <div id=\"s3-badge\">. The timeline shows one row per top-level element, and the root composition is built only from sub-compositions.",
+        "selector": "#scene-3",
+        "dataAttributes": {},
+        "sourceFile": "C:\\Users\\khushi kohli\\Desktop\\ishu github\\PDF-AIO\\brag-output-2026-10-25-021546\\composition\\index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Move <div id=\"scene-3\"> and its contents into a sub-composition file and mount it with data-composition-src."
+      },
+      {
+        "code": "nested_structure_needs_subcomposition",
+        "severity": "warning",
+        "message": "<div id=\"scene-4\"> is a timeline element that contains nested <div id=\"s4-content\">. The timeline shows one row per top-level element, and the root composition is built only from sub-compositions.",
+        "selector": "#scene-4",
+        "dataAttributes": {},
+        "sourceFile": "C:\\Users\\khushi kohli\\Desktop\\ishu github\\PDF-AIO\\brag-output-2026-10-25-021546\\composition\\index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Move <div id=\"scene-4\"> and its contents into a sub-composition file and mount it with data-composition-src."
+      }
+    ],
+    "filesScanned": 1
+  },
+  "runtime": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 6,
+    "infoCount": 0,
+    "findings": [
+      {
+        "code": "clip_media_fit",
+        "severity": "warning",
+        "message": "Audio \"sfx-bell-1\" is 1.48s but its slot (data-duration) is 2.50s — the slot is shortened to the media length when rendered. Set data-duration to ~1.48s if that isn't intended.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {
+          "data-composition-id": "main",
+          "data-start": "0",
+          "data-duration": "18",
+          "data-width": "1920",
+          "data-height": "1080"
+        },
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "time": 0
+      },
+      {
+        "code": "clip_media_fit",
+        "severity": "warning",
+        "message": "Audio \"sfx-drop-1\" is 0.11s but its slot (data-duration) is 1.00s — the slot is shortened to the media length when rendered. Set data-duration to ~0.11s if that isn't intended.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {
+          "data-composition-id": "main",
+          "data-start": "0",
+          "data-duration": "18",
+          "data-width": "1920",
+          "data-height": "1080"
+        },
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "time": 0
+      },
+      {
+        "code": "clip_media_fit",
+        "severity": "warning",
+        "message": "Audio \"sfx-drop-2\" is 0.11s but its slot (data-duration) is 1.00s — the slot is shortened to the media length when rendered. Set data-duration to ~0.11s if that isn't intended.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {
+          "data-composition-id": "main",
+          "data-start": "0",
+          "data-duration": "18",
+          "data-width": "1920",
+          "data-height": "1080"
+        },
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "time": 0
+      },
+      {
+        "code": "clip_media_fit",
+        "severity": "warning",
+        "message": "Audio \"sfx-drop-3\" is 0.11s but its slot (data-duration) is 1.00s — the slot is shortened to the media length when rendered. Set data-duration to ~0.11s if that isn't intended.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {
+          "data-composition-id": "main",
+          "data-start": "0",
+          "data-duration": "18",
+          "data-width": "1920",
+          "data-height": "1080"
+        },
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "time": 0
+      },
+      {
+        "code": "clip_media_fit",
+        "severity": "warning",
+        "message": "Audio \"sfx-click\" is 0.10s but its slot (data-duration) is 1.00s — the slot is shortened to the media length when rendered. Set data-duration to ~0.10s if that isn't intended.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {
+          "data-composition-id": "main",
+          "data-start": "0",
+          "data-duration": "18",
+          "data-width": "1920",
+          "data-height": "1080"
+        },
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "time": 0
+      },
+      {
+        "code": "clip_media_fit",
+        "severity": "warning",
+        "message": "Audio \"sfx-bell-outro\" is 1.48s but its slot (data-duration) is 3.00s — the slot is shortened to the media length when rendered. Set data-duration to ~1.48s if that isn't intended.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {
+          "data-composition-id": "main",
+          "data-start": "0",
+          "data-duration": "18",
+          "data-width": "1920",
+          "data-height": "1080"
+        },
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "time": 0
+      }
+    ]
+  },
+  "layout": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 2,
+    "infoCount": 0,
+    "findings": [
+      {
+        "code": "panel_out_of_canvas",
+        "severity": "warning",
+        "time": 1,
+        "selector": "div.glow-orb.orb-1",
+        "message": "Painted panel extends outside the composition canvas.",
+        "rect": {
+          "left": 288,
+          "top": -100,
+          "right": 888,
+          "bottom": 500,
+          "width": 600,
+          "height": 600
+        },
+        "containerSelector": "#root",
+        "text": "",
+        "fixHint": "Move the panel inward, or mark intentional off-canvas animation with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 0,
+          "top": 0,
+          "right": 1920,
+          "bottom": 1080,
+          "width": 1920,
+          "height": 1080
+        },
+        "overflow": {
+          "top": 100
+        },
+        "dataAttributes": {},
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 288,
+          "y": -100,
+          "width": 600,
+          "height": 600
+        },
+        "firstSeen": 1,
+        "lastSeen": 17,
+        "occurrences": 9,
+        "heldMs": 0,
+        "times": [
+          1,
+          3,
+          5,
+          7,
+          9,
+          11,
+          13,
+          15,
+          17
+        ]
+      },
+      {
+        "code": "panel_out_of_canvas",
+        "severity": "warning",
+        "time": 1,
+        "selector": "div.glow-orb.orb-2",
+        "message": "Painted panel extends outside the composition canvas.",
+        "rect": {
+          "left": 1028,
+          "top": 530,
+          "right": 1728,
+          "bottom": 1230,
+          "width": 700,
+          "height": 700
+        },
+        "containerSelector": "#root",
+        "text": "",
+        "fixHint": "Move the panel inward, or mark intentional off-canvas animation with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 0,
+          "top": 0,
+          "right": 1920,
+          "bottom": 1080,
+          "width": 1920,
+          "height": 1080
+        },
+        "overflow": {
+          "bottom": 150
+        },
+        "dataAttributes": {},
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 1028,
+          "y": 530,
+          "width": 700,
+          "height": 700
+        },
+        "firstSeen": 1,
+        "lastSeen": 17,
+        "occurrences": 9,
+        "heldMs": 0,
+        "times": [
+          1,
+          3,
+          5,
+          7,
+          9,
+          11,
+          13,
+          15,
+          17
+        ]
+      }
+    ],
+    "duration": 18,
+    "samples": [
+      1,
+      3,
+      5,
+      7,
+      9,
+      11,
+      13,
+      15,
+      17
+    ],
+    "transitionSamples": [],
+    "transitionSamplesDropped": 0,
+    "tolerance": 2,
+    "totalIssueCount": 2,
+    "truncated": false
+  },
+  "motion": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 0,
+    "infoCount": 0,
+    "findings": [],
+    "enabled": false,
+    "samples": 0
+  },
+  "contrast": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 3,
+    "infoCount": 0,
+    "findings": [
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 4.07:1; WCAG AA requires 4.5:1.",
+        "text": "PNG, JPG, WebP, HEIF",
+        "fg": "rgb(100,116,139)",
+        "bg": "rgb(13,13,20)",
+        "ratio": 4.07,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(109,124,145)",
+        "large": false,
+        "selector": "div > div:nth-of-type(5) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(5)",
+        "dataAttributes": {},
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 297,
+          "y": 746.09375,
+          "width": 188,
+          "height": 34
+        },
+        "time": 5,
+        "times": [
+          5
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 3.98:1; WCAG AA requires 4.5:1.",
+        "text": "Lossless PNG, High-DPI JPEG",
+        "fg": "rgb(100,116,139)",
+        "bg": "rgb(17,15,27)",
+        "ratio": 3.98,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(110,125,146)",
+        "large": false,
+        "selector": "div > div:nth-of-type(5) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(5)",
+        "dataAttributes": {},
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 773,
+          "y": 746.15771484375,
+          "width": 244,
+          "height": 34
+        },
+        "time": 5,
+        "times": [
+          5
+        ]
+      },
+      {
+        "code": "contrast_aa_failure",
+        "severity": "warning",
+        "message": "Contrast is 3.13:1; WCAG AA requires 4.5:1.",
+        "text": "DOCX, DOC, Rich Text",
+        "fg": "rgb(100,116,139)",
+        "bg": "rgb(53,23,87)",
+        "ratio": 3.13,
+        "requiredRatio": 4.5,
+        "suggestedColor": "rgb(130,143,161)",
+        "large": false,
+        "selector": "div > div:nth-of-type(5) > div:nth-of-type(2) > div:nth-of-type(3) > div:nth-of-type(5)",
+        "dataAttributes": {},
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 1249,
+          "y": 762.477783203125,
+          "width": 188,
+          "height": 34
+        },
+        "time": 5,
+        "times": [
+          5
+        ]
+      }
+    ],
+    "enabled": true,
+    "samples": [
+      1,
+      5,
+      9,
+      13,
+      17
+    ],
+    "checked": 44,
+    "passed": 41
+  },
+  "craft": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 4,
+    "infoCount": 0,
+    "findings": [
+      {
+        "code": "first_frame_empty",
+        "severity": "warning",
+        "message": "Frame 0 shows only the background, and the first frame is the thumbnail on social players: have the title or key image already on screen at 0 s instead of entering from nothing; see references/review.md.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0
+      },
+      {
+        "code": "text_below_floor",
+        "severity": "warning",
+        "message": "Type floor is 28 px (2.6% of the 1080 px short side, what a phone can read) and 25 text elements stay under it for 0.5 s or more, the smallest \"MOST POPULAR\" at 14 px: set reading text to at least 28 px, or put data-layout-ignore on text that is texture rather than reading; see references/look.md.",
+        "text": "MOST POPULAR",
+        "selector": "#card-1 > div:nth-of-type(2)",
+        "dataAttributes": {},
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 297,
+          "y": 595.28,
+          "width": 112.81,
+          "height": 18
+        },
+        "time": 4.5,
+        "times": [
+          0.25,
+          4.25,
+          4.5,
+          4.5,
+          4.5,
+          4.75,
+          4.75,
+          4.75,
+          5,
+          5,
+          5,
+          8.75,
+          9,
+          9.375,
+          9.375,
+          9.375,
+          9.375,
+          13.875,
+          13.875,
+          13.875,
+          13.875,
+          13.875,
+          13.875,
+          13.875,
+          13.875
+        ],
+        "fontPx": 14,
+        "floorPx": 28,
+        "seconds": 4.125,
+        "elements": [
+          {
+            "selector": "#card-1 > div:nth-of-type(2)",
+            "text": "MOST POPULAR",
+            "fontPx": 14,
+            "time": 4.5,
+            "seconds": 4.125
+          },
+          {
+            "selector": "#card-1 > div:nth-of-type(5)",
+            "text": "PNG, JPG, WebP, HEIF",
+            "fontPx": 14,
+            "time": 4.5,
+            "seconds": 4.125
+          },
+          {
+            "selector": "#card-2 > div:nth-of-type(2)",
+            "text": "ULTRA HD 216 DPI",
+            "fontPx": 14,
+            "time": 4.75,
+            "seconds": 3.875
+          },
+          {
+            "selector": "#card-2 > div:nth-of-type(5)",
+            "text": "Lossless PNG, High-DPI JPEG",
+            "fontPx": 14,
+            "time": 4.75,
+            "seconds": 3.875
+          },
+          {
+            "selector": "#card-3 > div:nth-of-type(2)",
+            "text": "OPENXML ENGINE",
+            "fontPx": 14,
+            "time": 5,
+            "seconds": 3.625
+          },
+          {
+            "selector": "#card-3 > div:nth-of-type(5)",
+            "text": "DOCX, DOC, Rich Text",
+            "fontPx": 14,
+            "time": 5,
+            "seconds": 3.625
+          },
+          {
+            "selector": "div.format-badges > span:nth-of-type(1)",
+            "text": "PDF",
+            "fontPx": 17.55,
+            "time": 13.875,
+            "seconds": 4.125
+          },
+          {
+            "selector": "div.format-badges > span:nth-of-type(2)",
+            "text": "DOCX",
+            "fontPx": 17.55,
+            "time": 13.875,
+            "seconds": 4.125
+          },
+          {
+            "selector": "div.format-badges > span:nth-of-type(3)",
+            "text": "XLSX",
+            "fontPx": 17.55,
+            "time": 13.875,
+            "seconds": 4.125
+          },
+          {
+            "selector": "div.format-badges > span:nth-of-type(4)",
+            "text": "PPTX",
+            "fontPx": 17.55,
+            "time": 13.875,
+            "seconds": 4.125
+          },
+          {
+            "selector": "div.format-badges > span:nth-of-type(5)",
+            "text": "WATERMARK",
+            "fontPx": 17.55,
+            "time": 13.875,
+            "seconds": 4.125
+          },
+          {
+            "selector": "div.format-badges > span:nth-of-type(6)",
+            "text": "AI ASSISTANT",
+            "fontPx": 17.55,
+            "time": 13.875,
+            "seconds": 4.125
+          },
+          {
+            "selector": "#card-1 > div:nth-of-type(4)",
+            "text": "Compile camera captures & graphics into crisp multi-page documents.",
+            "fontPx": 18,
+            "time": 4.5,
+            "seconds": 4.125
+          },
+          {
+            "selector": "#card-2 > div:nth-of-type(4)",
+            "text": "Render full PDF sheets into lossless graphics and ZIP archives.",
+            "fontPx": 18,
+            "time": 4.75,
+            "seconds": 3.875
+          },
+          {
+            "selector": "#card-3 > div:nth-of-type(4)",
+            "text": "Format Word files into standardized PDF prints completely on-device.",
+            "fontPx": 18,
+            "time": 5,
+            "seconds": 3.625
+          },
+          {
+            "selector": "#s3-details > div:nth-of-type(1) > div:nth-of-type(2) > p:nth-of-type(1)",
+            "text": "Silky smooth navigation across 60Hz, 90Hz, 120Hz, and 165Hz displays.",
+            "fontPx": 18,
+            "time": 9.375,
+            "seconds": 4.25
+          },
+          {
+            "selector": "#s3-details > div:nth-of-type(2) > div:nth-of-type(2) > p:nth-of-type(1)",
+            "text": "Zero cloud latency, complete privacy, zero telemetry data leakage.",
+            "fontPx": 18,
+            "time": 9.375,
+            "seconds": 4.25
+          },
+          {
+            "selector": "div.fps-label",
+            "text": "FPS Dynamic Lock",
+            "fontPx": 18.88,
+            "time": 9,
+            "seconds": 4.625
+          },
+          {
+            "selector": "#s4-content > div:nth-of-type(1)",
+            "text": "The Modern Standard",
+            "fontPx": 19.5,
+            "time": 13.875,
+            "seconds": 4.125
+          },
+          {
+            "selector": "#s1-badge",
+            "text": "Next-Gen Android Architecture",
+            "fontPx": 19.58,
+            "time": 0.25,
+            "seconds": 3.875
+          },
+          {
+            "selector": "#s2-badge",
+            "text": "Native Conversion Engine",
+            "fontPx": 20,
+            "time": 4.25,
+            "seconds": 4.375
+          },
+          {
+            "selector": "#s3-badge",
+            "text": "Unlocked Performance",
+            "fontPx": 20,
+            "time": 8.75,
+            "seconds": 4.875
+          },
+          {
+            "selector": "div.cta-btn",
+            "text": "Explore ADF AIO",
+            "fontPx": 25.35,
+            "time": 13.875,
+            "seconds": 4.125
+          },
+          {
+            "selector": "#s3-details > div:nth-of-type(1) > div:nth-of-type(2) > h3:nth-of-type(1)",
+            "text": "Hardware Refresh Rate Tuning",
+            "fontPx": 26,
+            "time": 9.375,
+            "seconds": 4.25
+          },
+          {
+            "selector": "#s3-details > div:nth-of-type(2) > div:nth-of-type(2) > h3:nth-of-type(1)",
+            "text": "100% Local On-Device Processing",
+            "fontPx": 26,
+            "time": 9.375,
+            "seconds": 4.25
+          }
+        ]
+      },
+      {
+        "code": "line_unread",
+        "severity": "warning",
+        "message": "\"FPS Dynamic Lock\" (3 words) is on screen 0.57 s (±0.01 s), under its 1.05 s floor: hold it about 0.5 s + 0.3 s a word (1.40 s here) before it leaves or changes; see references/motion.md.",
+        "text": "FPS Dynamic Lock",
+        "selector": "div.fps-label",
+        "dataAttributes": {},
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 513.77,
+          "y": 617.66,
+          "width": 210.45000000000005,
+          "height": 100.87
+        },
+        "time": 9,
+        "words": 3,
+        "seconds": 0.57,
+        "floorSeconds": 1.05
+      },
+      {
+        "code": "dead_stretch",
+        "severity": "warning",
+        "message": "Nothing on screen changes for 3.25 s (9.88–13.13 s): start the next move within 3 s, or put data-hold on the element whose stillness is deliberate; see references/motion.md.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 9.875,
+        "seconds": 3.25,
+        "floorSeconds": 3,
+        "until": 13.125
+      }
+    ],
+    "enabled": true,
+    "step": 0.125,
+    "samples": 144
+  },
+  "hdr": {
+    "autoPromotion": null,
+    "inspection": "available"
+  },
+  "snapshots": {
+    "enabled": false,
+    "files": [],
+    "times": [],
+    "findingFiles": []
+  }
+}

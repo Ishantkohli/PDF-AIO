@@ -1,0 +1,368 @@
+{
+  "version": 1,
+  "historyId": "80137deb-6d5d-45f0-897e-e42cfd829304",
+  "currentRevision": "9cacd7cb-5d8e-461d-9095-caf40f9eabaf",
+  "pendingChanges": false,
+  "files": {
+    "AGENTS.md": {
+      "hash": "1b36171117cb7c18f4100a0db6a3782ff2e096115995733200445cc2e80a4060",
+      "content": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\1b\\1b36171117cb7c18f4100a0db6a3782ff2e096115995733200445cc2e80a4060"
+    },
+    "CLAUDE.md": {
+      "hash": "1b36171117cb7c18f4100a0db6a3782ff2e096115995733200445cc2e80a4060",
+      "content": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\1b\\1b36171117cb7c18f4100a0db6a3782ff2e096115995733200445cc2e80a4060"
+    },
+    "assets/sfx/impact/impactBell_heavy_000.ogg": {
+      "hash": "94b8bb5f2d43ab65e4bcc32b28562416e9bc2c51d9fd4be1e333660ee52f977f",
+      "content": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\94\\94b8bb5f2d43ab65e4bcc32b28562416e9bc2c51d9fd4be1e333660ee52f977f"
+    },
+    "assets/sfx/interface/click_001.ogg": {
+      "hash": "ccfb7fa0cccdd9faec0eb16033c732b1e308d139d80f799161495d58f7adcdb9",
+      "content": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\cc\\ccfb7fa0cccdd9faec0eb16033c732b1e308d139d80f799161495d58f7adcdb9"
+    },
+    "assets/sfx/interface/drop_001.ogg": {
+      "hash": "692ee3a6f1821402ca649ff735bee9591dc4846c8098fc7d6a90fd15fa57c1af",
+      "content": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\69\\692ee3a6f1821402ca649ff735bee9591dc4846c8098fc7d6a90fd15fa57c1af"
+    },
+    "hyperframes.json": {
+      "hash": "53dbce1e19aa713cbb12ee0bc4d206143b45ab15e6ffbfcaa8f69572d4d24d50",
+      "content": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\53\\53dbce1e19aa713cbb12ee0bc4d206143b45ab15e6ffbfcaa8f69572d4d24d50"
+    },
+    "index.html": {
+      "hash": "31dc2a70037fecfdf8c6245d505d041217ad83fc76a7d088936f0826d320c325",
+      "content": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\31\\31dc2a70037fecfdf8c6245d505d041217ad83fc76a7d088936f0826d320c325"
+    },
+    "meta.json": {
+      "hash": "d9e674854cc03045369b88a1e86ee42b2abd009eb6115a107964a084eed00fa2",
+      "content": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\d9\\d9e674854cc03045369b88a1e86ee42b2abd009eb6115a107964a084eed00fa2"
+    },
+    "package.json": {
+      "hash": "579de1a233e904bc3c70297d84cfac7c23b6d26031e04ecb0585f7e227eda525",
+      "content": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\57\\579de1a233e904bc3c70297d84cfac7c23b6d26031e04ecb0585f7e227eda525"
+    },
+    "assets/banner.gif": {
+      "hash": "a3e91c2bb2569806c03afa0d35a1e0d530feea364a8d38604fb528cff44000c7",
+      "content": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\a3\\a3e91c2bb2569806c03afa0d35a1e0d530feea364a8d38604fb528cff44000c7"
+    },
+    "assets/music.mp3": {
+      "hash": "f9912f2c962ada1e579f5ccc5a7d854d67e5e81ee96a7dd8c885a8480ae58d09",
+      "content": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\f9\\f9912f2c962ada1e579f5ccc5a7d854d67e5e81ee96a7dd8c885a8480ae58d09"
+    }
+  },
+  "revisions": {
+    "ec8755cf-99f5-4fa8-9f1d-87004d0cb3ad": {
+      "actor": {
+        "kind": "outside",
+        "name": "Outside"
+      },
+      "label": "Changed outside the app",
+      "startedAt": 1792874916953,
+      "endedAt": 1792874916955,
+      "files": {
+        "index.html": {
+          "before": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\f8\\f8f36d6a60637a2db0db71f2f1884708fa570a3c7b8f0838f044020db27fd022",
+          "after": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\18\\180b84b12b02dfa9a9f18f1a173321ea321336c8a08d00fd85ec0487185dcb48"
+        }
+      }
+    },
+    "d1cd1bdd-fee4-434a-9bd9-e64650817fe5": {
+      "actor": {
+        "kind": "outside",
+        "name": "Outside"
+      },
+      "label": "Changed outside the app",
+      "startedAt": 1792875019616,
+      "endedAt": 1792875019619,
+      "files": {
+        "index.html": {
+          "before": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\18\\180b84b12b02dfa9a9f18f1a173321ea321336c8a08d00fd85ec0487185dcb48",
+          "after": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\46\\46563c3e739dfaf8eaf7819fc0a71df379de878cd741f792e5b7a323f6c06867"
+        }
+      }
+    },
+    "930d693f-af1d-402f-8ad2-5639ac453a7b": {
+      "actor": {
+        "kind": "outside",
+        "name": "Outside"
+      },
+      "label": "Changed outside the app",
+      "startedAt": 1792875332509,
+      "endedAt": 1792875332512,
+      "files": {
+        "index.html": {
+          "before": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\46\\46563c3e739dfaf8eaf7819fc0a71df379de878cd741f792e5b7a323f6c06867",
+          "after": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\93\\93460b93e9ec67c49d099b5b1f1e3ad64fd87084510620e955b2caa65b5f8ebf"
+        }
+      }
+    },
+    "d993872f-d0f6-4d63-ad37-7c3efa459eb7": {
+      "actor": {
+        "kind": "person",
+        "name": "You"
+      },
+      "targets": [
+        {
+          "file": "index.html",
+          "id": "s1-title",
+          "hfId": "hf-bff2",
+          "selector": "#s1-title"
+        }
+      ],
+      "label": "Edit text",
+      "startedAt": 1792875430141,
+      "endedAt": 1792875430141,
+      "files": {
+        "index.html": {
+          "before": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\93\\93460b93e9ec67c49d099b5b1f1e3ad64fd87084510620e955b2caa65b5f8ebf",
+          "after": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\f5\\f58c1c844b95f1c651153aa96e6bf1c372a24ed9525342ba03befad6d426d02d"
+        }
+      }
+    },
+    "2137ca4f-0c6c-42b2-b0a9-5b828267b472": {
+      "actor": {
+        "kind": "person",
+        "name": "You"
+      },
+      "targets": [
+        {
+          "file": "index.html",
+          "id": "s1-title",
+          "hfId": "hf-bff2",
+          "selector": "#s1-title"
+        }
+      ],
+      "label": "Edit text",
+      "startedAt": 1792875431065,
+      "endedAt": 1792875431065,
+      "files": {
+        "index.html": {
+          "before": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\f5\\f58c1c844b95f1c651153aa96e6bf1c372a24ed9525342ba03befad6d426d02d",
+          "after": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\e2\\e2ef7a24778e40265f866af694532520eb7f24fe2c164d80edcb4a1eac6fc1af"
+        }
+      }
+    },
+    "0d39ea2f-968f-4828-b5fc-04ee53d2ddec": {
+      "actor": {
+        "kind": "person",
+        "name": "You"
+      },
+      "targets": [
+        {
+          "file": "index.html",
+          "id": "s1-title",
+          "hfId": "hf-bff2",
+          "selector": "#s1-title"
+        }
+      ],
+      "label": "Edit text",
+      "startedAt": 1792875431628,
+      "endedAt": 1792875431628,
+      "files": {
+        "index.html": {
+          "before": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\e2\\e2ef7a24778e40265f866af694532520eb7f24fe2c164d80edcb4a1eac6fc1af",
+          "after": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\76\\7614f5624affb49d465d41dc85acf5fbda65529d1cebf0f594faab67efa82ade"
+        }
+      }
+    },
+    "9cacd7cb-5d8e-461d-9095-caf40f9eabaf": {
+      "actor": {
+        "kind": "person",
+        "name": "You"
+      },
+      "targets": [
+        {
+          "file": "index.html",
+          "id": "s1-title",
+          "hfId": "hf-bff2",
+          "selector": "#s1-title"
+        }
+      ],
+      "label": "Edit text",
+      "startedAt": 1792875431936,
+      "endedAt": 1792875431937,
+      "files": {
+        "index.html": {
+          "before": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\76\\7614f5624affb49d465d41dc85acf5fbda65529d1cebf0f594faab67efa82ade",
+          "after": "C:\\Users\\khushi kohli\\.cache\\hyperframes\\history\\80137deb-6d5d-45f0-897e-e42cfd829304\\blobs\\31\\31dc2a70037fecfdf8c6245d505d041217ad83fc76a7d088936f0826d320c325"
+        }
+      }
+    }
+  },
+  "checks": {
+    "latest": {
+      "revision": "ec8755cf-99f5-4fa8-9f1d-87004d0cb3ad",
+      "id": "7f859249-f11e-4704-871e-281f064f2140"
+    },
+    "revisions": {
+      "ec8755cf-99f5-4fa8-9f1d-87004d0cb3ad": [
+        {
+          "id": "7f859249-f11e-4704-871e-281f064f2140",
+          "scope": "project",
+          "report": "C:\\Users\\khushi kohli\\Desktop\\ishu github\\PDF-AIO\\brag-output-2026-10-25-021546\\composition\\.hyperframes\\artifacts\\checks\\7f859249-f11e-4704-871e-281f064f2140.json",
+          "metadata": {
+            "ok": true,
+            "browserSkipped": false,
+            "options": {
+              "samples": 9,
+              "atTransitions": false,
+              "maxIssues": 80,
+              "collapseStatic": true,
+              "tolerance": 2,
+              "timeout": 3000,
+              "contrast": true,
+              "strict": false,
+              "snapshots": false,
+              "browserGpuMode": "auto"
+            }
+          },
+          "createdAt": 1792874934743,
+          "contentHash": "766680db84a03cc63436c5d5ff19f481a0f734c31cb6a1dddddbd705bb1b511b",
+          "revision": "ec8755cf-99f5-4fa8-9f1d-87004d0cb3ad",
+          "inputFingerprint": "de2e0345674ea1445d38f5eebbef9142026bda32e5c5088a6f29b3066217dc8f",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        }
+      ]
+    },
+    "unversioned": [
+      {
+        "id": "6d125e07-e261-446c-b6ac-b0844866ecd4",
+        "scope": "project",
+        "report": "C:\\Users\\khushi kohli\\Desktop\\ishu github\\PDF-AIO\\brag-output-2026-10-25-021546\\composition\\.hyperframes\\artifacts\\checks\\6d125e07-e261-446c-b6ac-b0844866ecd4.json",
+        "metadata": {
+          "ok": false,
+          "browserSkipped": true,
+          "options": {
+            "samples": 9,
+            "atTransitions": false,
+            "maxIssues": 80,
+            "collapseStatic": true,
+            "tolerance": 2,
+            "timeout": 3000,
+            "contrast": true,
+            "strict": false,
+            "snapshots": false,
+            "browserGpuMode": "auto"
+          }
+        },
+        "createdAt": 1792874849184,
+        "contentHash": "f120ed469050c747f452fa7937fd006be189259b748df7ac39d4841b267a7aec",
+        "revision": null,
+        "inputFingerprint": "b20c80ad99f4d3472f0ad6cd5f33fc080223dd4133d68bbcdcd3b3dc7f059c59",
+        "inputScope": "local-project-files",
+        "attribution": "unversioned"
+      }
+    ]
+  },
+  "snapshots": {
+    "latest": {
+      "revision": "d1cd1bdd-fee4-434a-9bd9-e64650817fe5",
+      "id": "7e5b6497-7f9f-48a2-a030-a096c6542db7-4"
+    },
+    "revisions": {
+      "d1cd1bdd-fee4-434a-9bd9-e64650817fe5": [
+        {
+          "scope": "full",
+          "id": "7e5b6497-7f9f-48a2-a030-a096c6542db7-0",
+          "image": "C:\\Users\\khushi kohli\\Desktop\\ishu github\\PDF-AIO\\brag-output-2026-10-25-021546\\snapshots\\frame-00-at-2s.png",
+          "time": 2,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1792875099331,
+          "contentHash": "9dd7d197017096ee874d33f829c23bbf5c9cff82337be28cbb69b60b6a651c5f",
+          "revision": "d1cd1bdd-fee4-434a-9bd9-e64650817fe5",
+          "inputFingerprint": "15d744188bc864a22141e9fbe93e2e90e7ed10f195ad1e505f02481061c11e58",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "7e5b6497-7f9f-48a2-a030-a096c6542db7-1",
+          "image": "C:\\Users\\khushi kohli\\Desktop\\ishu github\\PDF-AIO\\brag-output-2026-10-25-021546\\snapshots\\frame-01-at-6s.png",
+          "time": 6,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1792875099332,
+          "contentHash": "60e110894e4c6fedb6711220f1d572966619a286a5d3c8028af283e504e98844",
+          "revision": "d1cd1bdd-fee4-434a-9bd9-e64650817fe5",
+          "inputFingerprint": "15d744188bc864a22141e9fbe93e2e90e7ed10f195ad1e505f02481061c11e58",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "7e5b6497-7f9f-48a2-a030-a096c6542db7-2",
+          "image": "C:\\Users\\khushi kohli\\Desktop\\ishu github\\PDF-AIO\\brag-output-2026-10-25-021546\\snapshots\\frame-02-at-11s.png",
+          "time": 11,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1792875099332,
+          "contentHash": "0637abeb75d9df6e26e9864c9969b42aec518957813279b5ee108a49353a86e6",
+          "revision": "d1cd1bdd-fee4-434a-9bd9-e64650817fe5",
+          "inputFingerprint": "15d744188bc864a22141e9fbe93e2e90e7ed10f195ad1e505f02481061c11e58",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "7e5b6497-7f9f-48a2-a030-a096c6542db7-3",
+          "image": "C:\\Users\\khushi kohli\\Desktop\\ishu github\\PDF-AIO\\brag-output-2026-10-25-021546\\snapshots\\frame-03-at-16s.png",
+          "time": 16,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1792875099332,
+          "contentHash": "1c82847b2601e145dc3770b154d44224f14a618bb1c17302618c6d5b541746e0",
+          "revision": "d1cd1bdd-fee4-434a-9bd9-e64650817fe5",
+          "inputFingerprint": "15d744188bc864a22141e9fbe93e2e90e7ed10f195ad1e505f02481061c11e58",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        },
+        {
+          "scope": "full",
+          "id": "7e5b6497-7f9f-48a2-a030-a096c6542db7-4",
+          "image": "C:\\Users\\khushi kohli\\Desktop\\ishu github\\PDF-AIO\\brag-output-2026-10-25-021546\\snapshots\\frame-04-at-17.46s.png",
+          "time": 17.46,
+          "metadata": {
+            "width": 1920,
+            "height": 1080,
+            "zoomScale": 1,
+            "browserGpuMode": "auto",
+            "warnings": [],
+            "partial": false
+          },
+          "createdAt": 1792875099333,
+          "contentHash": "1c82847b2601e145dc3770b154d44224f14a618bb1c17302618c6d5b541746e0",
+          "revision": "d1cd1bdd-fee4-434a-9bd9-e64650817fe5",
+          "inputFingerprint": "15d744188bc864a22141e9fbe93e2e90e7ed10f195ad1e505f02481061c11e58",
+          "inputScope": "local-project-files",
+          "attribution": "recorded-revision"
+        }
+      ]
+    },
+    "unversioned": []
+  }
+}
