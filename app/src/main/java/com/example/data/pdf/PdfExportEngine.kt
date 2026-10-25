@@ -342,8 +342,32 @@ object PdfExportEngine {
                     canvas.drawRoundRect(stampRect, 6f, 6f, stampPaint)
                     canvas.drawText(ann.textContent, x - 48f, y + 5f, stampText)
                 }
-                "SIGNATURE" -> {
-                    if (ann.pointsJson.isNotBlank()) {
+                "SIGNATURE", "TYPED_SIGNATURE" -> {
+                    val x = ann.posX * pageWidth
+                    val y = ann.posY * pageHeight
+                    if (ann.textContent.isNotBlank()) {
+                        val sigPaint = Paint().apply {
+                            color = ann.colorHex.toInt()
+                            textSize = if (ann.strokeWidth > 10f) ann.strokeWidth else 26f
+                            isAntiAlias = true
+                            isFakeBoldText = true
+                            typeface = android.graphics.Typeface.create("cursive", android.graphics.Typeface.ITALIC)
+                        }
+                        canvas.drawText(ann.textContent, x, y, sigPaint)
+                        // Underline flourish
+                        val linePaint = Paint().apply {
+                            color = ann.colorHex.toInt()
+                            strokeWidth = 2f
+                            style = Paint.Style.STROKE
+                            isAntiAlias = true
+                        }
+                        val textWidth = sigPaint.measureText(ann.textContent)
+                        val flourishPath = android.graphics.Path().apply {
+                            moveTo(x - 6f, y + 6f)
+                            quadTo(x + textWidth * 0.55f, y + 14f, x + textWidth + 14f, y + 4f)
+                        }
+                        canvas.drawPath(flourishPath, linePaint)
+                    } else if (ann.pointsJson.isNotBlank()) {
                         val sigPaint = Paint().apply {
                             color = ann.colorHex.toInt()
                             strokeWidth = 2.5f

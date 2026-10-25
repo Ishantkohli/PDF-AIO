@@ -3,11 +3,14 @@ package com.example.ui.screens
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -59,6 +62,7 @@ import com.example.data.pdf.DocumentConverterEngine
 import com.example.ui.AnnotationTool
 import com.example.ui.AppScreen
 import com.example.ui.PdfViewModel
+import com.example.ui.components.DigitalSignatureDialog
 import com.example.ui.components.WatermarkCustomizerDialog
 import com.example.ui.theme.*
 import org.json.JSONArray
@@ -125,6 +129,18 @@ fun ReaderScreen(viewModel: PdfViewModel) {
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
 
+    // Smooth horizontal page slide state
+    var pageSlideOffset by remember { mutableFloatStateOf(0f) }
+    val animatedSlideOffset by animateFloatAsState(
+        targetValue = pageSlideOffset,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "PageSlideOffset"
+    )
+
+    // Delete page confirmation dialog states
+    var showDeletePageDialog by remember { mutableStateOf(false) }
+    var isDeletingPage by remember { mutableStateOf(false) }
+
     // Live drawing stroke buffer for active pen/highlighter
     val currentDrawingPoints = remember { mutableStateListOf<Offset>() }
     var pageSizePx by remember { mutableStateOf(IntSize(1, 1)) }
@@ -148,9 +164,11 @@ fun ReaderScreen(viewModel: PdfViewModel) {
         }
     }
 
-    // Trigger rendering of active page
-    LaunchedEffect(currentPage, currentDoc) {
+    // Trigger rendering of active page + pre-fetch adjacent pages for smooth 60 FPS slide transitions
+    LaunchedEffect(currentPage, currentDoc, totalPages) {
         viewModel.renderPage(currentPage)
+        if (currentPage + 1 < totalPages) viewModel.renderPage(currentPage + 1)
+        if (currentPage - 1 >= 0) viewModel.renderPage(currentPage - 1)
     }
 
     val pageAnnotations = remember(annotations, currentPage) {
@@ -266,27 +284,28 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                 )
                             }
 
-                            // Acrobat AI Pill
+                            // Digital Signature Action Button
                             Button(
-                                onClick = { viewModel.toggleAiSheet(true) },
+                                onClick = { viewModel.showSignatureDialog(true) },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = CrimsonPrimary
+                                    containerColor = AdfElectricCyan,
+                                    contentColor = AdfMidnightBackground
                                 ),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                                 shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier.testTag("open_ai_assistant_button")
+                                modifier = Modifier.testTag("open_digital_signature_button")
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = "Acrobat AI",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(14.dp)
+                                    imageVector = Icons.Default.Draw,
+                                    contentDescription = "Sign Document",
+                                    tint = AdfMidnightBackground,
+                                    modifier = Modifier.size(15.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "AI",
+                                    text = "Sign",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    color = AdfMidnightBackground
                                 )
                             }
 
@@ -513,17 +532,23 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             viewModel.setActiveTool(AnnotationTool.STAMP)
                         },
                         onSelectSignature = {
-                            if (signatures.isEmpty()) {
-                                viewModel.navigateTo(AppScreen.SIGNATURE_VAULT)
-                            } else {
-                                showSignaturePicker = true
-                            }
+                            viewModel.showSignatureDialog(true)
                         },
                         onOpenWatermarkDialog = {
                             showWatermarkDialog = true
                         },
                         onClearPageAnnotations = {
                             viewModel.clearPageAnnotations(currentPage)
+                        },
+                        onDeleteCurrentPage = {
+                            showDeletePageDialog = true
+                        },
+                        onOrganizePages = {
+                            viewModel.navigateTo(AppScreen.PAGE_MANAGER)
+                        },
+                        onRotatePage = {
+                            val doc = currentDoc ?: return@AnnotationToolbar
+                            viewModel.rotateCurrentDocumentPage(doc, currentPage)
                         },
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
@@ -681,21 +706,69 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                         .graphicsLayer(
                             scaleX = scale,
                             scaleY = scale,
-                            translationX = offsetX,
+                            translationX = offsetX + animatedSlideOffset,
                             translationY = offsetY
                         )
-                        // Gestures: When tools are NONE, pinch zoom & pan
-                        .pointerInput(activeTool) {
+                        // Gestures: When tools are NONE, pinch zoom & pan or horizontal slide between pages
+                        .pointerInput(activeTool, scale, currentPage, totalPages) {
                             if (activeTool == AnnotationTool.NONE) {
-                                detectTransformGestures { _, pan, zoom, _ ->
-                                    scale = (scale * zoom).coerceIn(1f, 4f)
-                                    if (scale == 1f) {
-                                        offsetX = 0f
-                                        offsetY = 0f
-                                    } else {
-                                        offsetX += pan.x
-                                        offsetY += pan.y
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    var totalDragX = 0f
+                                    var isMultiTouch = false
+                                    pageSlideOffset = 0f
+
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        if (event.changes.size > 1) {
+                                            isMultiTouch = true
+                                            val p0 = event.changes[0]
+                                            val p1 = event.changes[1]
+                                            val currentDist = kotlin.math.hypot(p0.position.x - p1.position.x, p0.position.y - p1.position.y)
+                                            val prevDist = kotlin.math.hypot(p0.previousPosition.x - p1.previousPosition.x, p0.previousPosition.y - p1.previousPosition.y)
+                                            val zoom = if (prevDist > 0f) currentDist / prevDist else 1f
+                                            val pan = (p0.position - p0.previousPosition + p1.position - p1.previousPosition) / 2f
+                                            scale = (scale * zoom).coerceIn(1f, 4f)
+                                            if (scale > 1.05f) {
+                                                offsetX += pan.x
+                                                offsetY += pan.y
+                                            } else {
+                                                scale = 1f
+                                                offsetX = 0f
+                                                offsetY = 0f
+                                            }
+                                            event.changes.forEach { it.consume() }
+                                        } else if (!isMultiTouch) {
+                                            val change = event.changes.firstOrNull()
+                                            if (change != null && change.pressed) {
+                                                val pan = change.position - change.previousPosition
+                                                if (scale > 1.05f) {
+                                                    offsetX += pan.x
+                                                    offsetY += pan.y
+                                                    change.consume()
+                                                } else {
+                                                    totalDragX += pan.x
+                                                    pageSlideOffset = totalDragX
+                                                    if (kotlin.math.abs(totalDragX) > 12f) {
+                                                        change.consume()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } while (event.changes.any { it.pressed })
+
+                                    if (!isMultiTouch && scale <= 1.05f) {
+                                        if (totalDragX < -60f && currentPage < totalPages - 1) {
+                                            // Slid from right to left (finger moved left) -> Next Page (page number increases)
+                                            viewModel.setCurrentPage(currentPage + 1)
+                                            hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                        } else if (totalDragX > 60f && currentPage > 0) {
+                                            // Slid from left to right (finger moved right) -> Previous Page (page number decreases)
+                                            viewModel.setCurrentPage(currentPage - 1)
+                                            hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                        }
                                     }
+                                    pageSlideOffset = 0f
                                 }
                             }
                         }
@@ -896,8 +969,33 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                         style = Stroke(width = 2.5f)
                                     )
                                 }
-                                "SIGNATURE" -> {
-                                    if (ann.pointsJson.isNotBlank()) {
+                                "SIGNATURE", "TYPED_SIGNATURE" -> {
+                                    if (ann.textContent.isNotBlank()) {
+                                        val x = ann.posX * canvasW
+                                        val y = ann.posY * canvasH
+                                        drawContext.canvas.nativeCanvas.apply {
+                                            val sigPaint = android.graphics.Paint().apply {
+                                                color = ann.colorHex.toInt()
+                                                textSize = if (ann.strokeWidth > 10f) ann.strokeWidth else 26f
+                                                isAntiAlias = true
+                                                isFakeBoldText = true
+                                                typeface = android.graphics.Typeface.create("cursive", android.graphics.Typeface.ITALIC)
+                                            }
+                                            drawText(ann.textContent, x, y, sigPaint)
+                                            val textWidth = sigPaint.measureText(ann.textContent)
+                                            val flourishPaint = android.graphics.Paint().apply {
+                                                color = ann.colorHex.toInt()
+                                                strokeWidth = 2.2f
+                                                style = android.graphics.Paint.Style.STROKE
+                                                isAntiAlias = true
+                                            }
+                                            val flourishPath = android.graphics.Path().apply {
+                                                moveTo(x - 6f, y + 6f)
+                                                quadTo(x + textWidth * 0.55f, y + 14f, x + textWidth + 14f, y + 4f)
+                                            }
+                                            drawPath(flourishPath, flourishPaint)
+                                        }
+                                    } else if (ann.pointsJson.isNotBlank()) {
                                         try {
                                             val strokes = JSONArray(ann.pointsJson)
                                             for (s in 0 until strokes.length()) {
@@ -1106,6 +1204,65 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
+
+                    // Floating page slide indicators (shows upcoming page number when sliding)
+                    if (animatedSlideOffset < -25f && currentPage < totalPages - 1) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = CrimsonPrimary.copy(alpha = 0.95f),
+                            shadowElevation = 8.dp,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Page ${currentPage + 2}",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    } else if (animatedSlideOffset > 25f && currentPage > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = CrimsonPrimary.copy(alpha = 0.95f),
+                            shadowElevation = 8.dp,
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .padding(start = 16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Page $currentPage",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
                             }
                         }
                     }
@@ -1432,6 +1589,73 @@ fun ReaderScreen(viewModel: PdfViewModel) {
         )
     }
 
+    // Delete Current Page Confirmation Dialog
+    if (showDeletePageDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isDeletingPage) showDeletePageDialog = false },
+            containerColor = AcrobatDarkSurfaceElevated,
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = null,
+                    tint = Color(0xFFEF4444),
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Delete Page ${currentPage + 1}?",
+                    color = AcrobatTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (totalPages <= 1) {
+                        "This is the only page in the document. You cannot delete the last remaining page."
+                    } else {
+                        "Are you sure you want to permanently delete Page ${currentPage + 1} of $totalPages from this PDF document? A clean copy without this page will be saved."
+                    },
+                    color = AcrobatTextSecondary,
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                if (totalPages > 1) {
+                    Button(
+                        onClick = {
+                            val doc = currentDoc ?: return@Button
+                            isDeletingPage = true
+                            viewModel.deleteCurrentPage(doc, currentPage) {
+                                isDeletingPage = false
+                                showDeletePageDialog = false
+                            }
+                        },
+                        enabled = !isDeletingPage,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFEF4444),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        if (isDeletingPage) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp))
+                        } else {
+                            Text("Delete Page", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeletePageDialog = false },
+                    enabled = !isDeletingPage
+                ) {
+                    Text(if (totalPages <= 1) "Close" else "Cancel", color = AcrobatTextSecondary)
+                }
+            }
+        )
+    }
+
     // Edit Existing Annotation Dialog
     editingAnnotation?.let { targetAnn ->
         var editText by remember { mutableStateOf(targetAnn.textContent) }
@@ -1680,6 +1904,16 @@ fun ReaderScreen(viewModel: PdfViewModel) {
         }
     }
 
-    // Acrobat AI Assistant Sheet
-    AiAssistantSheet(viewModel = viewModel)
+    // Digital Signature Studio Modal
+    val isSignatureDialogOpen by viewModel.isSignatureDialogVisible.collectAsStateWithLifecycle()
+    if (isSignatureDialogOpen) {
+        DigitalSignatureDialog(
+            viewModel = viewModel,
+            activeDocumentTitle = currentDoc?.title,
+            currentPageIndex = currentPage,
+            totalPages = totalPages,
+            savedSignatures = signatures,
+            onDismiss = { viewModel.showSignatureDialog(false) }
+        )
+    }
 }

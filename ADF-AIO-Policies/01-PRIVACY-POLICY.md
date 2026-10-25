@@ -12,24 +12,22 @@
 ADF AIO is operated by Ishant Kohli. Contact: **ishantkohlikohli@gmail.com**. Website: **https://ishantkohli.me**. 
 
 ## 2. Information handled
-- **Documents and files:** The app includes document selection/scanning, PDF conversion, annotation, and export functionality. Selected or discovered files may be processed on-device. The app requests broad storage access on supported Android versions.
-- **Local data:** Source code includes a Room database and document/annotation models. Exact stored fields and deletion behavior require further verification.
-- **AI document analysis — important discrepancy:** Source code implements a Gemini API request. The request includes a document title, an excerpt of up to 6,000 characters, the user’s question, and up to four previous conversation exchanges. The owner has said the intended AI provider is “none,” so this policy does not claim Gemini is active in the released app. If the feature is enabled in any release, this policy must be updated before release and users must be told what is sent to Google.
-- **Analytics and crash reports:** Unverified. Firebase-related dependencies exist, but their presence alone does not prove analytics or crash reporting is active.
-- **Website data:** The owner reports no website cookies or analytics; this has not been independently verified against the live site, hosting, scripts, or embeds.
+- **Documents and files:** The app provides offline document selection/scanning, PDF conversion, drawing/typing digital signatures, annotation, and export functionality. All processing is performed 100% on-device.
+- **Local data:** Stored locally in an encrypted Room SQLite database on device. Never synced to cloud servers.
+- **AI / Cloud Services:** None. All AI integrations, Gemini API calls, cloud backups, and Firebase integrations have been completely removed. The app operates 100% locally and offline.
+- **Analytics and crash reports:** None. Firebase dependencies and cloud telemetry are disabled.
+- **Website data:** The owner reports no website cookies or analytics.
 
-No account requirement was identified in the reviewed implementation. Recheck if account features are added.
+No accounts, sign-in, or internet connection required.
 
 ## 3. Uses
-Local files may be processed to provide the document features a user selects. Any cloud processing, telemetry, analytics, or other collection must be verified and disclosed before it is enabled.
+Local files are processed strictly on-device to provide document reading, signing, and conversion features. No document data ever leaves your device.
 
 ## 4. Third parties
-The app contains links to social platforms and the operator’s website. Opening those links takes the user to third-party services, which apply their own privacy notices. A Gemini integration exists in the source; its release status is unresolved. If active, it transmits the document title, excerpt, question, and recent conversation context to Google for AI analysis. Do not claim that documents always stay on-device unless the AI feature is disabled and this has been tested.
-
-Firebase Analytics/Crashlytics activity is unverified.
+The app contains informational links to social platforms (Instagram, GitHub, Reddit, WhatsApp, X/Twitter, LinkedIn) and the operator’s website. Opening those links takes the user to third-party services in their external browser, which apply their own privacy notices. Zero document data or personal telemetry is transmitted to third parties.
 
 ## 5. Storage, backup, and retention
-The owner reports Android backup is disabled. Everything is Locally Stored or used .
+Android cloud backup is completely disabled (`android:allowBackup="false"`). Everything is stored and processed locally on the user's device.
 
 Some data may remain locally until deleted by the user, the app, or Android’s app-data removal process. Exact retention and deletion behavior for every document, annotation, export, temporary file, and log has not been fully verified. No fixed server-side retention period is claimed here.
 

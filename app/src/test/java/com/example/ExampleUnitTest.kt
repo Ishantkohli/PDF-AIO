@@ -71,4 +71,23 @@ class ExampleUnitTest {
     assertNotNull(loading)
     assertEquals("Test failure", error.message)
   }
+
+  @Test
+  fun versionComparator_correctlyEvaluatesVersions() {
+    // Newer version detection
+    assertTrue(com.example.update.VersionComparator.isNewer("v1.1.0", "1.0"))
+    assertTrue(com.example.update.VersionComparator.isNewer("1.0.1", "1.0.0"))
+    assertTrue(com.example.update.VersionComparator.isNewer("2.0.0", "1.9.9"))
+    assertTrue(com.example.update.VersionComparator.isNewer("v1.2", "v1.1.5"))
+
+    // Equal or older version detection
+    assertFalse(com.example.update.VersionComparator.isNewer("1.0", "1.0"))
+    assertFalse(com.example.update.VersionComparator.isNewer("v1.0.0", "1.0.0"))
+    assertFalse(com.example.update.VersionComparator.isNewer("1.0.0", "1.1.0"))
+    assertFalse(com.example.update.VersionComparator.isNewer("0.9.9", "1.0.0"))
+
+    // Version code preference when available
+    assertTrue(com.example.update.VersionComparator.isNewer("1.0", "1.0", remoteCode = 2, currentCode = 1))
+    assertFalse(com.example.update.VersionComparator.isNewer("2.0", "1.0", remoteCode = 1, currentCode = 2))
+  }
 }

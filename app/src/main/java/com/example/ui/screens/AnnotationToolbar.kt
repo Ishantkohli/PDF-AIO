@@ -4,12 +4,15 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.BrandingWatermark
 import androidx.compose.material.icons.automirrored.filled.Comment
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,15 +39,19 @@ fun AnnotationToolbar(
     onSelectSignature: () -> Unit,
     onOpenWatermarkDialog: () -> Unit = {},
     onClearPageAnnotations: () -> Unit,
+    onDeleteCurrentPage: () -> Unit = {},
+    onOrganizePages: () -> Unit = {},
+    onRotatePage: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showColorPicker by remember { mutableStateOf(false) }
     var showStampMenu by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Sub-palette for Pen / Highlighter Colors & Widths
@@ -125,18 +132,23 @@ fun AnnotationToolbar(
             }
         }
 
-        // Primary Floating Pill Toolbar
+        // Primary Floating Slideable Pill Toolbar
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = AcrobatDarkSurfaceElevated,
             shadowElevation = 10.dp,
             border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(AcrobatDarkBorder)),
-            modifier = Modifier.shadow(8.dp, RoundedCornerShape(24.dp))
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(8.dp, RoundedCornerShape(24.dp))
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scrollState)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 // Freehand Pen
                 ToolIconButton(
@@ -279,7 +291,43 @@ fun AnnotationToolbar(
                     }
                 )
 
-                // Eraser / Clear Page
+                // Delete Page Quick Tool
+                ToolIconButton(
+                    icon = Icons.Default.DeleteOutline,
+                    label = "Delete Page",
+                    isSelected = false,
+                    selectedColor = Color(0xFFEF4444),
+                    onClick = {
+                        showColorPicker = false
+                        onDeleteCurrentPage()
+                    }
+                )
+
+                // Rotate Page Quick Tool
+                ToolIconButton(
+                    icon = Icons.AutoMirrored.Filled.RotateRight,
+                    label = "Rotate",
+                    isSelected = false,
+                    selectedColor = Color(0xFF06B6D4),
+                    onClick = {
+                        showColorPicker = false
+                        onRotatePage()
+                    }
+                )
+
+                // Page Manager / Organize Quick Tool
+                ToolIconButton(
+                    icon = Icons.Default.ViewAgenda,
+                    label = "Pages",
+                    isSelected = false,
+                    selectedColor = AdfElectricCyan,
+                    onClick = {
+                        showColorPicker = false
+                        onOrganizePages()
+                    }
+                )
+
+                // Eraser / Clear Page Annotations
                 ToolIconButton(
                     icon = Icons.Default.DeleteSweep,
                     label = "Clear",
@@ -316,20 +364,36 @@ fun ToolIconButton(
     selectedColor: Color,
     onClick: () -> Unit
 ) {
-    Box(
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) selectedColor.copy(alpha = 0.22f) else Color.Transparent,
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(
+                if (isSelected) selectedColor else Color.Transparent
+            )
+        ),
         modifier = Modifier
-            .size(42.dp)
-            .clip(CircleShape)
-            .background(if (isSelected) selectedColor.copy(alpha = 0.2f) else Color.Transparent)
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .testTag("tool_${label.lowercase()}"),
-        contentAlignment = Alignment.Center
+            .testTag("tool_${label.lowercase().replace(" ", "_")}")
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (isSelected) selectedColor else AcrobatTextSecondary,
-            modifier = Modifier.size(20.dp)
-        )
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (isSelected) selectedColor else AcrobatTextSecondary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                color = if (isSelected) selectedColor else AcrobatTextMuted,
+                fontSize = 10.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+            )
+        }
     }
 }

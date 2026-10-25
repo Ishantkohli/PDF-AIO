@@ -21,6 +21,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
 import com.example.data.fps.DisplayRefreshRateManager
 import com.example.ui.AppScreen
 import com.example.ui.theme.*
@@ -38,7 +41,9 @@ fun CoreSuiteMenuSheet(
     onOpenToolTab: (Int) -> Unit,
     onOpenFpsDialog: () -> Unit,
     onOpenPureViewer: () -> Unit,
-    onOpenFile: () -> Unit
+    onOpenFile: () -> Unit,
+    onCheckUpdates: (() -> Unit)? = null,
+    onOpenUpdateSettings: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val currentRefreshRate by DisplayRefreshRateManager.currentRefreshRate.collectAsState()
@@ -127,6 +132,23 @@ fun CoreSuiteMenuSheet(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     HorizontalDivider(color = AdfBorderSubtle)
+                }
+
+                // 0. Adobe Scan Document Scanner Card
+                item {
+                    CoreSuiteCard(
+                        tag = "scanner",
+                        accentColor = AdfCoral,
+                        icon = { AdfIcon.Camera(size = 24.dp, primaryColor = AdfCoral, accentColor = Color.White) },
+                        title = "Scan to PDF (Adobe Scan)",
+                        badge = "CAMERA",
+                        subtitle = "Snap receipts, contracts & paper with Magic Color whitening",
+                        actionText = "Open Document Scanner Camera →",
+                        onAction = {
+                            onDismiss()
+                            onNavigate(AppScreen.SCANNER)
+                        }
+                    )
                 }
 
                 // 1. Convertion Tool Card
@@ -317,6 +339,41 @@ fun CoreSuiteMenuSheet(
                             onDismiss()
                             onOpenToolTab(4)
                             onNavigate(AppScreen.TOOLS)
+                        }
+                    )
+                }
+
+                // 7. Check for App Updates (GitHub Releases)
+                item {
+                    CoreSuiteCard(
+                        tag = "app_updates",
+                        accentColor = AdfEmeraldGreen,
+                        icon = { Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = AdfEmeraldGreen, modifier = Modifier.size(24.dp)) },
+                        title = "7. Check for App Updates",
+                        badge = "GITHUB OTA",
+                        subtitle = "Scan GitHub Releases for latest APK, download progress & auto-install",
+                        actionText = "Check for Updates Now →",
+                        onAction = {
+                            onDismiss()
+                            onCheckUpdates?.invoke()
+                        },
+                        headerAction = {
+                            if (onOpenUpdateSettings != null) {
+                                IconButton(
+                                    onClick = {
+                                        onDismiss()
+                                        onOpenUpdateSettings()
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Update Settings",
+                                        tint = AdfTextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
                         }
                     )
                 }

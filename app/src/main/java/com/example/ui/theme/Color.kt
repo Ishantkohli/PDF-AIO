@@ -14,6 +14,7 @@ val AdfBlueGlow = Color(0x332563EB)
 val AdfCyberViolet = Color(0xFF8B5CF6)
 val AdfVioletGlow = Color(0x338B5CF6)
 val AdfEmerald = Color(0xFF10B981)
+val AdfEmeraldGreen = AdfEmerald
 val AdfAmber = Color(0xFFF59E0B)
 val AdfCoral = Color(0xFFEF4444)
 

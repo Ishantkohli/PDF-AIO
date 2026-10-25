@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.app.Activity
 import android.content.Context
 import android.os.Build
 import android.os.Environment
@@ -17,6 +18,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -54,6 +57,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private val unifiedDocDateFormat = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
+
 /**
  * Unified representation of a document for ADF AIO home list
  */
@@ -73,7 +78,10 @@ data class UnifiedDocItem(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: PdfViewModel) {
+fun HomeScreen(
+    viewModel: PdfViewModel,
+    updateViewModel: com.example.update.UpdateViewModel? = null
+) {
     val documents by viewModel.documents.collectAsStateWithLifecycle()
     val deviceFiles by viewModel.deviceFiles.collectAsStateWithLifecycle()
     val isScanning by viewModel.isScanningDeviceFiles.collectAsStateWithLifecycle()
@@ -94,10 +102,18 @@ fun HomeScreen(viewModel: PdfViewModel) {
         mutableStateOf(DeviceDocumentScanner.hasStoragePermission(context))
     }
 
-    // Auto re-check permission & trigger scan on resume (e.g. returning from Settings)
+    val activity = context as? Activity
+
+    // Auto re-check permission, unlock hardware refresh rate & ensure 60+ FPS on resume
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
+                if (activity != null) {
+                    DisplayRefreshRateManager.unlockMaxRefreshRate(activity)
+                    if (DisplayRefreshRateManager.currentRefreshRate.value < 60) {
+                        DisplayRefreshRateManager.setTargetRefreshRate(activity, 60)
+                    }
+                }
                 val currentPerm = DeviceDocumentScanner.hasStoragePermission(context)
                 if (currentPerm != hasStoragePerm) {
                     hasStoragePerm = currentPerm
@@ -112,13 +128,33 @@ fun HomeScreen(viewModel: PdfViewModel) {
     }
 
     LaunchedEffect(Unit) {
+        if (activity != null) {
+            DisplayRefreshRateManager.unlockMaxRefreshRate(activity)
+            if (DisplayRefreshRateManager.currentRefreshRate.value < 60) {
+                DisplayRefreshRateManager.setTargetRefreshRate(activity, 60)
+            }
+        }
+        val savedFolder = DeviceDocumentScanner.getPersistedTreeUri(context)
+        if (savedFolder != null) {
+            viewModel.scanFolderTree(savedFolder)
+        }
         viewModel.scanDeviceDocuments()
     }
 
     val documentPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let { viewModel.importPdfFromUri(it) }
+        uri?.let {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (ignored: Exception) {}
+            DeviceDocumentScanner.recordStoragePermissionGranted(context)
+            hasStoragePerm = true
+            viewModel.importPdfFromUri(it)
+        }
     }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
@@ -128,9 +164,11 @@ fun HomeScreen(viewModel: PdfViewModel) {
             try {
                 context.contentResolver.takePersistableUriPermission(
                     uri,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
             } catch (ignored: Exception) {}
+            DeviceDocumentScanner.savePersistedTreeUri(context, uri)
+            hasStoragePerm = true
             viewModel.scanFolderTree(uri)
         }
     }
@@ -138,14 +176,16 @@ fun HomeScreen(viewModel: PdfViewModel) {
     val manageStorageLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
-        hasStoragePerm = DeviceDocumentScanner.hasStoragePermission(context)
+        DeviceDocumentScanner.recordStoragePermissionGranted(context)
+        hasStoragePerm = true
         viewModel.scanDeviceDocuments()
     }
 
     val multiplePermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        hasStoragePerm = DeviceDocumentScanner.hasStoragePermission(context)
+        DeviceDocumentScanner.recordStoragePermissionGranted(context)
+        hasStoragePerm = true
         viewModel.scanDeviceDocuments()
     }
 
@@ -287,7 +327,7 @@ fun HomeScreen(viewModel: PdfViewModel) {
                         ) {
                             Image(
                                 painter = painterResource(id = R.drawable.pdf_aio_logo),
-                                contentDescription = "ADF AIO Emblem",
+                                contentDescription = "PDF AIO Emblem",
                                 modifier = Modifier.size(26.dp)
                             )
                         }
@@ -295,7 +335,7 @@ fun HomeScreen(viewModel: PdfViewModel) {
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "ADF AIO",
+                                    text = "PDF AIO",
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp),
                                     color = AdfTextPrimary
                                 )
@@ -371,26 +411,42 @@ fun HomeScreen(viewModel: PdfViewModel) {
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = {
-                    documentPickerLauncher.launch(
-                        arrayOf(
-                            "application/pdf",
-                            "application/msword",
-                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            "text/plain"
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.navigationBarsPadding()
+            ) {
+                FloatingActionButton(
+                    onClick = {
+                        documentPickerLauncher.launch(
+                            arrayOf(
+                                "application/pdf",
+                                "application/msword",
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                "text/plain"
+                            )
                         )
-                    )
-                },
-                containerColor = AdfElectricCyan,
-                contentColor = AdfMidnightBackground,
-                shape = RoundedCornerShape(16.dp),
-                icon = { AdfIcon.FileOpen(size = 20.dp, primaryColor = AdfMidnightBackground, accentColor = AdfMidnightBackground) },
-                text = { Text("Open File", fontWeight = FontWeight.Bold, fontSize = 13.sp) },
-                modifier = Modifier
-                    .testTag("open_file_fab")
-                    .navigationBarsPadding()
-            )
+                    },
+                    containerColor = AdfSurfaceCard,
+                    contentColor = AdfElectricCyan,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .testTag("open_file_fab")
+                ) {
+                    AdfIcon.FileOpen(size = 20.dp, primaryColor = AdfElectricCyan, accentColor = AdfVibrantBlue)
+                }
+
+                ExtendedFloatingActionButton(
+                    onClick = { viewModel.navigateTo(AppScreen.SCANNER) },
+                    containerColor = AdfElectricCyan,
+                    contentColor = AdfMidnightBackground,
+                    shape = RoundedCornerShape(16.dp),
+                    icon = { AdfIcon.Camera(size = 20.dp, primaryColor = AdfMidnightBackground, accentColor = AdfCoral) },
+                    text = { Text("Scan Document", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp) },
+                    modifier = Modifier.testTag("scan_document_fab")
+                )
+            }
         },
         containerColor = AdfMidnightBackground
     ) { padding ->
@@ -460,18 +516,94 @@ fun HomeScreen(viewModel: PdfViewModel) {
                                 ) {
                                     Text("Grant", color = AdfMidnightBackground, fontSize = 11.5.sp, fontWeight = FontWeight.ExtraBold)
                                 }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                IconButton(
+                                    onClick = {
+                                        DeviceDocumentScanner.recordStoragePermissionGranted(context)
+                                        hasStoragePerm = true
+                                    },
+                                    modifier = Modifier.size(30.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = AdfTextMuted, modifier = Modifier.size(16.dp))
+                                }
                             }
                         }
                     }
                 }
 
-                // Section 1: Core Suite Quick Menu Bar & Shortcuts
+                // Section 1: Scan to PDF & Core Suite Quick Menu Bar
                 item {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
+                        // Hero Scan to PDF Card (Adobe Scan Engine)
+                        Card(
+                            onClick = { viewModel.navigateTo(AppScreen.SCANNER) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .border(
+                                    width = 1.dp,
+                                    brush = Brush.horizontalGradient(
+                                        listOf(AdfCoral, AdfElectricCyan)
+                                    ),
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .testTag("hero_scan_document_card"),
+                            colors = CardDefaults.cardColors(containerColor = AdfObsidianSurface)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(AdfCoral.copy(alpha = 0.16f))
+                                        .border(1.dp, AdfCoral.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AdfIcon.Camera(size = 24.dp, primaryColor = AdfCoral, accentColor = Color.White)
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "SCAN TO PDF",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                            color = AdfTextPrimary
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = AdfCoral.copy(alpha = 0.18f)
+                                        ) {
+                                            Text(
+                                                text = "ADOBE SCAN",
+                                                color = AdfCoral,
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = "Snap receipts, notes & contracts with Magic Color paper whitening",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = AdfTextSecondary
+                                    )
+                                }
+                                AdfIcon.ChevronRight(size = 20.dp, color = AdfElectricCyan)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -521,7 +653,7 @@ fun HomeScreen(viewModel: PdfViewModel) {
                                                 color = AdfElectricCyan.copy(alpha = 0.12f)
                                             ) {
                                                 Text(
-                                                    text = "6 TOOLS",
+                                                    text = "7 TOOLS",
                                                     color = AdfElectricCyan,
                                                     fontSize = 8.5.sp,
                                                     fontWeight = FontWeight.ExtraBold,
@@ -530,7 +662,7 @@ fun HomeScreen(viewModel: PdfViewModel) {
                                             }
                                         }
                                         Text(
-                                            text = "Convert • Credits • FPS • Pure Viewer • Sign • Watermark",
+                                            text = "Scan • Convert • Credits • FPS • Pure Viewer • Sign • Watermark",
                                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                             color = AdfTextSecondary,
                                             maxLines = 1,
@@ -550,22 +682,27 @@ fun HomeScreen(viewModel: PdfViewModel) {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             item {
-                                QuickToolChip("1. Convertion", "HUB", AdfElectricCyan) {
+                                QuickToolChip("1. Scan PDF", "CAMERA", AdfCoral) {
+                                    viewModel.navigateTo(AppScreen.SCANNER)
+                                }
+                            }
+                            item {
+                                QuickToolChip("2. Convertion", "HUB", AdfElectricCyan) {
                                     viewModel.navigateTo(AppScreen.CONVERSION_HUB)
                                 }
                             }
                             item {
-                                QuickToolChip("2. Credits", "10/10/2026", Color(0xFFD946EF)) {
+                                QuickToolChip("3. Credits", "10/10/2026", Color(0xFFD946EF)) {
                                     viewModel.navigateTo(AppScreen.CREDITS)
                                 }
                             }
                             item {
-                                QuickToolChip("3. FPS", "${currentRefreshRate}Hz", Color(0xFF10B981)) {
+                                QuickToolChip("4. FPS", "${currentRefreshRate}Hz", Color(0xFF10B981)) {
                                     showRefreshRateDialog = true
                                 }
                             }
                             item {
-                                QuickToolChip("4. Pure Viewer", "NO EDIT", AdfCyberViolet) {
+                                QuickToolChip("5. Pure Viewer", "NO EDIT", AdfCyberViolet) {
                                     viewModel.setPureViewerMode(true)
                                     val firstDoc = documents.firstOrNull()
                                     if (firstDoc != null) {
@@ -576,12 +713,12 @@ fun HomeScreen(viewModel: PdfViewModel) {
                                 }
                             }
                             item {
-                                QuickToolChip("5. Signature", "VAULT", AdfAmber) {
+                                QuickToolChip("6. Signature", "VAULT", AdfAmber) {
                                     viewModel.navigateTo(AppScreen.SIGNATURE_VAULT)
                                 }
                             }
                             item {
-                                QuickToolChip("6. Watermark", "STUDIO", AdfElectricCyan) {
+                                QuickToolChip("7. Watermark", "STUDIO", AdfElectricCyan) {
                                     viewModel.setSelectedToolTab(4)
                                     viewModel.navigateTo(AppScreen.TOOLS)
                                 }
@@ -856,7 +993,11 @@ fun HomeScreen(viewModel: PdfViewModel) {
                         }
                     }
                 } else {
-                    items(filteredDocs, key = { it.id }) { item ->
+                    items(
+                        items = filteredDocs,
+                        key = { it.id },
+                        contentType = { it.fileType }
+                    ) { item ->
                         UnifiedDocumentCard(
                             doc = item,
                             context = context,
@@ -911,7 +1052,11 @@ fun HomeScreen(viewModel: PdfViewModel) {
     // Storage Permission Explanation Dialog
     if (showStoragePermissionDialog) {
         AlertDialog(
-            onDismissRequest = { showStoragePermissionDialog = false },
+            onDismissRequest = {
+                showStoragePermissionDialog = false
+                DeviceDocumentScanner.recordStoragePermissionGranted(context)
+                hasStoragePerm = true
+            },
             containerColor = AdfSurfaceCard,
             shape = RoundedCornerShape(18.dp),
             title = {
@@ -928,7 +1073,7 @@ fun HomeScreen(viewModel: PdfViewModel) {
             },
             text = {
                 Text(
-                    text = "To scan and display all PDF, Word (.docx), Excel, and text files stored across your entire internal storage and SD cards, ADF AIO needs All Files Access permission in Android Settings.\n\nYou can also select any specific folder via Storage Access Framework.",
+                    text = "To scan and display all PDF, Word (.docx), Excel, and text files stored across your entire internal storage and SD cards, PDF AIO needs All Files Access permission in Android Settings.\n\nYou can also select any specific folder via Storage Access Framework (one-time grant).",
                     color = AdfTextSecondary,
                     fontSize = 13.5.sp,
                     lineHeight = 19.sp
@@ -947,14 +1092,25 @@ fun HomeScreen(viewModel: PdfViewModel) {
                 }
             },
             dismissButton = {
-                OutlinedButton(
-                    onClick = {
-                        showStoragePermissionDialog = false
-                        folderPickerLauncher.launch(null)
-                    },
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text("Select Folder (SAF)", color = AdfElectricCyan, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            showStoragePermissionDialog = false
+                            DeviceDocumentScanner.recordStoragePermissionGranted(context)
+                            hasStoragePerm = true
+                        }
+                    ) {
+                        Text("Don't Ask Again", color = AdfTextMuted, fontSize = 11.5.sp)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            showStoragePermissionDialog = false
+                            folderPickerLauncher.launch(null)
+                        },
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Select Folder (SAF)", color = AdfElectricCyan, fontSize = 12.sp)
+                    }
                 }
             }
         )
@@ -996,6 +1152,12 @@ fun HomeScreen(viewModel: PdfViewModel) {
                         "text/plain"
                     )
                 )
+            },
+            onCheckUpdates = {
+                updateViewModel?.checkForUpdates(context, manual = true)
+            },
+            onOpenUpdateSettings = {
+                updateViewModel?.openSettingsDialog()
             }
         )
     }
@@ -1079,7 +1241,6 @@ fun UnifiedDocumentCard(
     onPreviewFirstPage: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     val badgeColor = when (doc.fileType) {
         DeviceFileType.PDF -> AdfCoral
@@ -1123,35 +1284,35 @@ fun UnifiedDocumentCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon / Preview
+            // Icon / Document Type Badge (Instant GPU-rendered vector, silky-smooth 60+ FPS, eliminates back-button glitch)
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(badgeColor.copy(alpha = 0.12f))
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(badgeColor.copy(alpha = 0.14f))
+                    .border(1.dp, badgeColor.copy(alpha = 0.28f), RoundedCornerShape(12.dp))
                     .clickable(enabled = doc.isPdf) { onPreviewFirstPage() },
                 contentAlignment = Alignment.Center
             ) {
-                if (doc.isPdf) {
-                    val file = doc.originalDoc?.filePath?.let { File(it) }
-                    if ((file != null && file.exists()) || doc.deviceFile?.uri != null) {
-                        PDFViewer(
-                            file = file,
-                            uri = doc.deviceFile?.uri,
-                            document = doc.originalDoc,
-                            modifier = Modifier.fillMaxSize(),
-                            scaleFactor = 1.0f,
-                            showPageBadge = false,
-                            showShadow = false,
-                            cornerRadius = 6.dp
-                        )
-                    } else {
-                        AdfIcon.PdfDoc(size = 30.dp, primaryColor = AdfCoral, accentColor = Color.White)
+                when (doc.fileType) {
+                    DeviceFileType.PDF -> {
+                        AdfIcon.PdfDoc(size = 28.dp, primaryColor = AdfCoral, accentColor = Color.White)
                     }
-                } else if (doc.fileType == DeviceFileType.WORD_DOCX || doc.fileType == DeviceFileType.WORD_DOC) {
-                    AdfIcon.WordDoc(size = 30.dp, primaryColor = Color(0xFF3B82F6), accentColor = Color.White)
-                } else {
-                    AdfIcon.FileOpen(size = 26.dp, primaryColor = badgeColor, accentColor = Color.White)
+                    DeviceFileType.WORD_DOCX, DeviceFileType.WORD_DOC -> {
+                        AdfIcon.WordDoc(size = 28.dp, primaryColor = Color(0xFF3B82F6), accentColor = Color.White)
+                    }
+                    DeviceFileType.EXCEL -> {
+                        AdfIcon.FileOpen(size = 26.dp, primaryColor = Color(0xFF10B981), accentColor = Color.White)
+                    }
+                    DeviceFileType.POWERPOINT -> {
+                        AdfIcon.FileOpen(size = 26.dp, primaryColor = Color(0xFFF97316), accentColor = Color.White)
+                    }
+                    DeviceFileType.TEXT -> {
+                        AdfIcon.FileOpen(size = 26.dp, primaryColor = Color(0xFF8B5CF6), accentColor = Color.White)
+                    }
+                    else -> {
+                        AdfIcon.FileOpen(size = 26.dp, primaryColor = badgeColor, accentColor = Color.White)
+                    }
                 }
             }
 
@@ -1208,7 +1369,7 @@ fun UnifiedDocumentCard(
 
                     if (doc.dateModified > 0) {
                         Text(
-                            text = dateFormat.format(Date(doc.dateModified)),
+                            text = unifiedDocDateFormat.format(Date(doc.dateModified)),
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                             color = AdfTextMuted
                         )

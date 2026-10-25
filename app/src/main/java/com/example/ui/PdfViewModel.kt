@@ -7,7 +7,6 @@ import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.data.ai.GeminiClient
 import com.example.data.local.AnnotationEntity
 import com.example.data.local.DocumentEntity
 import com.example.data.local.PdfDatabase
@@ -30,6 +29,7 @@ import java.io.FileOutputStream
 enum class AppScreen {
     BOOTUP_SHOWCASE,
     HOME,
+    SCANNER,
     CONVERSION_HUB,
     READER,
     TOOLS,
@@ -50,14 +50,6 @@ enum class AnnotationTool {
     WATERMARK,
     ERASER
 }
-
-data class AiChatMessage(
-    val id: String = java.util.UUID.randomUUID().toString(),
-    val isUser: Boolean,
-    val text: String,
-    val thinkingProcess: String = "",
-    val timestamp: Long = System.currentTimeMillis()
-)
 
 class PdfViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -209,18 +201,13 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeStrokeWidth = MutableStateFlow(4f)
     val activeStrokeWidth: StateFlow<Float> = _activeStrokeWidth.asStateFlow()
 
-    // AI Assistant State
-    private val _isAiSheetOpen = MutableStateFlow(false)
-    val isAiSheetOpen: StateFlow<Boolean> = _isAiSheetOpen.asStateFlow()
+    // Digital Signature Modal State
+    private val _isSignatureDialogVisible = MutableStateFlow(false)
+    val isSignatureDialogVisible: StateFlow<Boolean> = _isSignatureDialogVisible.asStateFlow()
 
-    private val _aiMessages = MutableStateFlow<List<AiChatMessage>>(emptyList())
-    val aiMessages: StateFlow<List<AiChatMessage>> = _aiMessages.asStateFlow()
-
-    private val _isAiLoading = MutableStateFlow(false)
-    val isAiLoading: StateFlow<Boolean> = _isAiLoading.asStateFlow()
-
-    private val _aiCurrentThinking = MutableStateFlow("")
-    val aiCurrentThinking: StateFlow<String> = _aiCurrentThinking.asStateFlow()
+    fun showSignatureDialog(visible: Boolean = true) {
+        _isSignatureDialogVisible.value = visible
+    }
 
     // Status / Toast Messages
     private val _statusMessage = MutableStateFlow<String?>(null)
@@ -462,6 +449,38 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     _statusMessage.value = "Could not open PDF: file may be password protected or corrupted."
+                }
+            }
+        }
+    }
+
+    fun registerScannedPdf(pdfFile: File, title: String, onRegistered: (DocumentEntity) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                val renderer = android.graphics.pdf.PdfRenderer(pfd)
+                val pages = renderer.pageCount
+                renderer.close()
+                pfd.close()
+
+                val newDoc = DocumentEntity(
+                    uriString = Uri.fromFile(pdfFile).toString(),
+                    title = title.removeSuffix(".pdf"),
+                    filePath = pdfFile.absolutePath,
+                    pageCount = pages,
+                    fileSizeBytes = pdfFile.length(),
+                    lastOpenedTimestamp = System.currentTimeMillis()
+                )
+                val id = dao.insertDocument(newDoc)
+                val savedDoc = newDoc.copy(id = id)
+                scanDeviceDocuments()
+                withContext(Dispatchers.Main) {
+                    onRegistered(savedDoc)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Failed to register scanned document: ${e.localizedMessage}"
                 }
             }
         }
@@ -1029,6 +1048,48 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun deleteCurrentPage(
+        doc: DocumentEntity,
+        pageIndex: Int,
+        onDone: (Boolean) -> Unit = {}
+    ) {
+        if (doc.pageCount <= 1) {
+            _statusMessage.value = "Cannot delete the only page in the document"
+            onDone(false)
+            return
+        }
+        val remaining = (0 until doc.pageCount).filter { it != pageIndex }
+        val newTargetPage = pageIndex.coerceAtMost(remaining.size - 1)
+        val cleanTitle = if (doc.title.endsWith("_edited")) doc.title else "${doc.title}_edited"
+        organizeDocumentPages(
+            doc = doc,
+            includedIndices = remaining,
+            rotations = emptyMap(),
+            newTitle = cleanTitle
+        ) {
+            setCurrentPage(newTargetPage)
+            _statusMessage.value = "Page ${pageIndex + 1} deleted successfully"
+            onDone(true)
+        }
+    }
+
+    fun rotateCurrentDocumentPage(
+        doc: DocumentEntity,
+        pageIndex: Int,
+        degrees: Int = 90,
+        onDone: () -> Unit = {}
+    ) {
+        organizeDocumentPages(
+            doc = doc,
+            includedIndices = (0 until doc.pageCount).toList(),
+            rotations = mapOf(pageIndex to degrees),
+            newTitle = "${doc.title}_rotated"
+        ) {
+            _statusMessage.value = "Page ${pageIndex + 1} rotated"
+            onDone()
+        }
+    }
+
     fun extractPagesToNewDocument(
         doc: DocumentEntity,
         includedIndices: List<Int>,
@@ -1075,64 +1136,57 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- Acrobat AI Assistant ---
-    fun toggleAiSheet(open: Boolean? = null) {
-        _isAiSheetOpen.value = open ?: !_isAiSheetOpen.value
-    }
-
-    fun sendAiPrompt(promptText: String) {
+    // --- Digital Signature Stamping onto Active Document ---
+    fun stampSignature(
+        pageIndex: Int,
+        isTyped: Boolean,
+        typedText: String = "",
+        strokePathsJson: String = "",
+        colorHex: Long = 0xFF1E3A8AL,
+        posX: Float = 0.60f,
+        posY: Float = 0.80f,
+        saveToVault: Boolean = false,
+        vaultTitle: String = "My Signature"
+    ) {
         val doc = _currentDocument.value ?: return
-        val userMsg = AiChatMessage(isUser = true, text = promptText)
-        _aiMessages.value = _aiMessages.value + userMsg
-        _isAiLoading.value = true
-        _aiCurrentThinking.value = "Analyzing document context and synthesizing..."
-
-        viewModelScope.launch {
-            // Document context representation
-            val docSummary = buildString {
-                append("Document: ${doc.title}\n")
-                append("Total Pages: ${doc.pageCount}\n")
-                append("Current Page: ${_currentPage.value + 1}\n")
-                // Sample context snippet for AI
-                if (doc.title.contains("NDA", ignoreCase = true) || doc.title.contains("Disclosure", ignoreCase = true)) {
-                    append("Excerpt: Mutual Non-Disclosure Agreement between AcroTech Solutions Inc. and Recipient. Defines Confidential Information, obligations, 3-year term, and California governing law.")
-                } else if (doc.title.contains("Whitepaper", ignoreCase = true) || doc.title.contains("Architecture", ignoreCase = true)) {
-                    append("Excerpt: Technical Whitepaper on Intelligent Document Processing Architecture, rasterization pipelines, vector annotation store, and multimodal reasoning benchmarks.")
-                } else if (doc.title.contains("Invoice", ignoreCase = true)) {
-                    append("Excerpt: Consulting Statement of Work & Invoice #INV-2026-0891. Deliverables total $18,600.00 for PDF viewer, annotation layer, and AI integration.")
+        viewModelScope.launch(Dispatchers.IO) {
+            if (saveToVault) {
+                val pathsToStore = if (isTyped) {
+                    val typedObj = org.json.JSONObject()
+                    typedObj.put("type", "TYPED")
+                    typedObj.put("text", typedText)
+                    typedObj.put("colorHex", colorHex)
+                    typedObj.toString()
                 } else {
-                    append("User document with ${doc.pageCount} pages.")
+                    strokePathsJson
                 }
+                dao.insertSignature(
+                    SignatureEntity(
+                        title = vaultTitle.ifBlank { if (isTyped) typedText else "Drawn Signature" },
+                        pathsJson = pathsToStore
+                    )
+                )
             }
 
-            val history = _aiMessages.value.filter { it.text.isNotBlank() }
-                .takeLast(6)
-                .map { Pair(if (it.isUser) it.text else "", if (!it.isUser) it.text else "") }
-
-            val response = GeminiClient.analyzeDocument(
-                documentTitle = doc.title,
-                documentExcerpt = docSummary,
-                userQuery = promptText,
-                conversationHistory = history
+            val annotation = AnnotationEntity(
+                documentId = doc.id,
+                pageIndex = pageIndex,
+                type = if (isTyped) "TYPED_SIGNATURE" else "SIGNATURE",
+                pointsJson = if (isTyped) "" else strokePathsJson,
+                textContent = if (isTyped) typedText else "",
+                colorHex = colorHex,
+                strokeWidth = 26f,
+                posX = posX,
+                posY = posY
             )
+            val id = dao.insertAnnotation(annotation)
+            _currentAnnotations.value = _currentAnnotations.value + annotation.copy(id = id)
 
-            _isAiLoading.value = false
-            _aiCurrentThinking.value = ""
-
-            val assistantMsg = if (response.error != null) {
-                AiChatMessage(
-                    isUser = false,
-                    text = "⚠️ ${response.error}",
-                    thinkingProcess = response.thinkingProcess
-                )
-            } else {
-                AiChatMessage(
-                    isUser = false,
-                    text = response.responseText,
-                    thinkingProcess = response.thinkingProcess
-                )
+            withContext(Dispatchers.Main) {
+                setCurrentPage(pageIndex)
+                _statusMessage.value = "Signature stamped on Page ${pageIndex + 1}!"
+                _isSignatureDialogVisible.value = false
             }
-            _aiMessages.value = _aiMessages.value + assistantMsg
         }
     }
 
