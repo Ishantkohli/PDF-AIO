@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="shortcut_scan"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/app_name"
+        android:shortcutLongLabel="@string/shortcut_scan_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.aistudio.acrobatreader.hptwqz"
+            android:targetClass="com.example.MainActivity">
+            <extra android:name="shortcut_action" android:value="open_scanner" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="shortcut_sign"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/app_name"
+        android:shortcutLongLabel="@string/shortcut_sign_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.aistudio.acrobatreader.hptwqz"
+            android:targetClass="com.example.MainActivity">
+            <extra android:name="shortcut_action" android:value="open_signature" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="shortcut_convert"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/app_name"
+        android:shortcutLongLabel="@string/shortcut_convert_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.aistudio.acrobatreader.hptwqz"
+            android:targetClass="com.example.MainActivity">
+            <extra android:name="shortcut_action" android:value="open_conversion" />
+        </intent>
+    </shortcut>
+</shortcuts>

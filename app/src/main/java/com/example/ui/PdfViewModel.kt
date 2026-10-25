@@ -35,7 +35,8 @@ enum class AppScreen {
     TOOLS,
     SIGNATURE_VAULT,
     PAGE_MANAGER,
-    CREDITS
+    CREDITS,
+    PDF_DIFF
 }
 
 enum class AnnotationTool {

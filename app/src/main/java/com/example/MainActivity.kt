@@ -45,10 +45,12 @@ class MainActivity : ComponentActivity() {
 
         // Initialize hardware display refresh rates (60/90/120/144/165 FPS)
         DisplayRefreshRateManager.initialize(this)
+        com.example.ui.theme.ThemeManager.initialize(this)
         FpsMonitor.start()
 
         setContent {
-            AcrobatTheme {
+            val activeThemeStyle by com.example.ui.theme.ThemeManager.currentTheme.collectAsStateWithLifecycle()
+            AcrobatTheme(colorScheme = com.example.ui.theme.ThemeManager.getColorScheme(activeThemeStyle)) {
                 val viewModel: PdfViewModel = viewModel()
                 val updateViewModel: com.example.update.UpdateViewModel = viewModel()
                 val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
@@ -301,6 +303,10 @@ class MainActivity : ComponentActivity() {
                                     updateViewModel = updateViewModel,
                                     onBack = { viewModel.navigateTo(AppScreen.HOME) }
                                 )
+                                AppScreen.PDF_DIFF -> com.example.ui.screens.PdfDiffScreen(
+                                    viewModel = viewModel,
+                                    onBack = { viewModel.navigateTo(AppScreen.HOME) }
+                                )
                             }
                         }
 
@@ -337,6 +343,23 @@ class MainActivity : ComponentActivity() {
         updateViewModel: com.example.update.UpdateViewModel? = null
     ) {
         if (intent == null) return
+
+        // Handle launcher shortcuts
+        val shortcutAction = intent.getStringExtra("shortcut_action")
+        when (shortcutAction) {
+            "open_scanner" -> {
+                viewModel.navigateTo(AppScreen.SCANNER)
+                return
+            }
+            "open_signature" -> {
+                viewModel.navigateTo(AppScreen.SIGNATURE_VAULT)
+                return
+            }
+            "open_conversion" -> {
+                viewModel.navigateTo(AppScreen.CONVERSION_HUB)
+                return
+            }
+        }
 
         // Handle notification tap to automatically open update dialog
         if (intent.getBooleanExtra("open_update_dialog", false) || intent.action == "ACTION_OPEN_UPDATE_DIALOG") {

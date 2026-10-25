@@ -1,5 +1,6 @@
 package com.example.ui.theme
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -43,12 +44,13 @@ private val AdfLightColorScheme = lightColorScheme(
     outline = Color(0xFF334155)
 )
 
+
 @Composable
 fun AcrobatTheme(
     darkTheme: Boolean = true, // Default to deep midnight ADF AIO theme
+    colorScheme: ColorScheme = if (darkTheme) AdfDarkColorScheme else AdfLightColorScheme,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) AdfDarkColorScheme else AdfLightColorScheme
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,

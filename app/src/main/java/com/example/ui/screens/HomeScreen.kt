@@ -50,7 +50,10 @@ import com.example.ui.components.AdfIcon
 import com.example.ui.components.CoreSuiteMenuSheet
 import com.example.ui.components.PDFViewer
 import com.example.ui.components.PDFViewerDialog
+import com.example.ui.components.QrCameraScannerDialog
 import com.example.ui.components.RefreshRateDialog
+import com.example.ui.components.ShareAppCard
+import com.example.ui.components.ThemeSelectorDialog
 import com.example.ui.theme.*
 import java.io.File
 import java.text.SimpleDateFormat
@@ -94,6 +97,8 @@ fun HomeScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilterTab by remember { mutableIntStateOf(0) }
     var showRefreshRateDialog by remember { mutableStateOf(false) }
+    var showThemeDialog by remember { mutableStateOf(false) }
+    var showQrScannerDialog by remember { mutableStateOf(false) }
     var showCoreSuiteMenu by remember { mutableStateOf(false) }
     var showStoragePermissionDialog by remember { mutableStateOf(false) }
     var previewDoc by remember { mutableStateOf<UnifiedDocItem?>(null) }
@@ -378,6 +383,32 @@ fun HomeScreen(
                         } else {
                             AdfIcon.Refresh(size = 20.dp, color = AdfElectricCyan)
                         }
+                    }
+
+                    // Custom Theme Selector Switcher
+                    IconButton(
+                        onClick = { showThemeDialog = true },
+                        modifier = Modifier.testTag("theme_selector_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = "Themes",
+                            tint = AdfElectricCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // B&W QR Camera Scanner
+                    IconButton(
+                        onClick = { showQrScannerDialog = true },
+                        modifier = Modifier.testTag("qr_scanner_header_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = "Scan QR Code",
+                            tint = AdfElectricCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
 
                     // FPS Tuning Dialog
@@ -723,7 +754,19 @@ fun HomeScreen(
                                     viewModel.navigateTo(AppScreen.TOOLS)
                                 }
                             }
+                            item {
+                                QuickToolChip("8. QR Scanner", "SCANNER", Color.White) {
+                                    showQrScannerDialog = true
+                                }
+                            }
                         }
+                    }
+                }
+
+                // Offline QR Share App & Download Card
+                item {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                        ShareAppCard()
                     }
                 }
 
@@ -1122,6 +1165,18 @@ fun HomeScreen(
             onToggleFpsHud = { viewModel.setShowFpsHud(it) },
             onReplayBootup = { viewModel.navigateTo(AppScreen.BOOTUP_SHOWCASE) },
             onDismiss = { showRefreshRateDialog = false }
+        )
+    }
+
+    if (showThemeDialog) {
+        ThemeSelectorDialog(
+            onDismiss = { showThemeDialog = false }
+        )
+    }
+
+    if (showQrScannerDialog) {
+        QrCameraScannerDialog(
+            onDismiss = { showQrScannerDialog = false }
         )
     }
 

@@ -188,10 +188,10 @@ fun CoreSuiteMenuSheet(
                                     Triple("Images to PDF", "Compile camera photos & graphic files into a PDF", "PHOTOS" to AdfCoral),
                                     Triple("PDF to Images", "Render PDF pages into ultra HD PNG or JPEG files", "PNG/JPG" to AdfElectricCyan),
                                     Triple("Merge Multiple PDFs", "Combine 2 or more PDF documents into one master document", "MERGE" to AdfAmber),
-                                    Triple("Organize & Rotate Pages", "Reorder sheets, rotate 90°/180°, and delete pages", "PAGES" to AdfCyberViolet)
+                                    Triple("Organize & Rotate Pages", "Reorder sheets, rotate 90°/180°, and delete pages", "PAGES" to AdfCyberViolet),
+                                    Triple("Side-by-Side PDF Compare / Diff", "Compare 2 PDFs with synchronized scrolling & diff highlighting", "COMPARE" to AdfElectricCyan)
                                 )
                                 subItems.forEachIndexed { idx, (title, sub, badgePair) ->
-                                    val toolTab = when (idx) { 0 -> 3; 1 -> 2; 2 -> 0; 3 -> 1; 4 -> 5; else -> 6 }
                                     ConversionSubItem(
                                         title = title,
                                         subtitle = sub,
@@ -199,8 +199,13 @@ fun CoreSuiteMenuSheet(
                                         badgeColor = badgePair.second,
                                         onClick = {
                                             onDismiss()
-                                            onOpenToolTab(toolTab)
-                                            onNavigate(AppScreen.TOOLS)
+                                            if (idx == 6) {
+                                                onNavigate(AppScreen.PDF_DIFF)
+                                            } else {
+                                                val toolTab = when (idx) { 0 -> 3; 1 -> 2; 2 -> 0; 3 -> 1; 4 -> 5; else -> 6 }
+                                                onOpenToolTab(toolTab)
+                                                onNavigate(AppScreen.TOOLS)
+                                            }
                                         }
                                     )
                                 }

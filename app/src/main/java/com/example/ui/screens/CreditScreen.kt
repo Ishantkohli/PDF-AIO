@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.BuildConfig
 import com.example.ui.PdfViewModel
 import com.example.ui.components.AdfIcon
+import com.example.ui.components.ShareAppCard
 import com.example.ui.theme.*
 import com.example.update.UpdateState
 import com.example.update.UpdateViewModel
@@ -201,6 +202,11 @@ fun CreditScreen(
                             context.startActivity(intent)
                         }
                     )
+                }
+
+                // Section 1.5: Offline QR Share App & Download Card
+                item {
+                    ShareAppCard()
                 }
 
                 // Section 2: Reference Neon "Follow Me" Panel

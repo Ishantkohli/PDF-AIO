@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">PDF AIO</string>
+    <string name="shortcut_scan_long">Scan Document to PDF</string>
+    <string name="shortcut_sign_long">Sign PDF Document</string>
+    <string name="shortcut_convert_long">Convert Word / Image to PDF</string>
 </resources>

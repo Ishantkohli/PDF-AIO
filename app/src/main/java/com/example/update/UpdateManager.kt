@@ -35,7 +35,7 @@ object UpdateManager {
     private const val KEY_REPO = "github_repo"
     private const val KEY_LAST_CHECK = "last_check_timestamp"
 
-    const val DEFAULT_GITHUB_OWNER = "ishantkohlikohli"
+    const val DEFAULT_GITHUB_OWNER = "ishantkohli"
     const val DEFAULT_GITHUB_REPO = "PDF-AIO"
 
     /**
@@ -43,7 +43,11 @@ object UpdateManager {
      */
     fun getGithubOwner(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getString(KEY_OWNER, DEFAULT_GITHUB_OWNER) ?: DEFAULT_GITHUB_OWNER
+        val saved = prefs.getString(KEY_OWNER, null)
+        if (saved.isNullOrBlank() || saved.equals("ishantkohlikohli", ignoreCase = true)) {
+            return DEFAULT_GITHUB_OWNER
+        }
+        return saved
     }
 
     /**
