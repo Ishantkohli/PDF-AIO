@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,7 +38,8 @@ enum class ConversionIconKind {
     PDF_TO_WORD,
     WATERMARK,
     MERGE,
-    ORGANIZE
+    ORGANIZE,
+    COMPRESS_PDF
 }
 
 data class ConversionAction(
@@ -64,6 +66,9 @@ fun ConversionHubScreen(
     onSelectConversion: (Int) -> Unit,
     onBack: () -> Unit
 ) {
+    val activeThemeStyle by ThemeManager.currentTheme.collectAsStateWithLifecycle()
+    val isLiquidTheme = activeThemeStyle == AppThemeStyle.LIQUID_GLASS || activeThemeStyle == AppThemeStyle.FROSTED_CRYSTAL
+
     BackHandler { onBack() }
 
     val conversions = remember {
@@ -144,6 +149,17 @@ fun ConversionHubScreen(
                 accentColor = Color(0xFFEC4899),
                 supportedFormats = "Visual thumbnail page grid",
                 targetTab = 6
+            ),
+            ConversionAction(
+                id = 7,
+                title = "Compress PDF File",
+                subtitle = "Shrink PDF file size by downsampling images & stripping redundant metadata",
+                tag = "FILE OPTIMIZER",
+                iconKind = ConversionIconKind.COMPRESS_PDF,
+                iconBgColor = AdfElectricCyan.copy(alpha = 0.15f),
+                accentColor = AdfElectricCyan,
+                supportedFormats = "Low / Medium / Extreme compression profiles",
+                targetTab = 7
             )
         )
     }
@@ -189,11 +205,11 @@ fun ConversionHubScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AdfMidnightBackground
+                    containerColor = if (isLiquidTheme) Color.Transparent else AdfMidnightBackground
                 )
             )
         },
-        containerColor = AdfMidnightBackground
+        containerColor = if (isLiquidTheme) Color.Transparent else AdfMidnightBackground
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -308,6 +324,9 @@ fun ConversionHubScreen(
                                 }
                                 ConversionIconKind.ORGANIZE -> {
                                     AdfIcon.Layers(size = 26.dp, primaryColor = action.accentColor)
+                                }
+                                ConversionIconKind.COMPRESS_PDF -> {
+                                    AdfIcon.Conversion(size = 26.dp, primaryColor = action.accentColor, isAnimated = true)
                                 }
                             }
                         }

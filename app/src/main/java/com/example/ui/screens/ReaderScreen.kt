@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
@@ -57,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.fps.DisplayRefreshRateManager
 import com.example.data.local.AnnotationEntity
 import com.example.data.pdf.DocumentConverterEngine
 import com.example.ui.AnnotationTool
@@ -89,6 +92,8 @@ fun ReaderScreen(viewModel: PdfViewModel) {
     val ttsSpeed by viewModel.ttsPlaybackSpeed.collectAsStateWithLifecycle()
     val ttsSentence by viewModel.ttsCurrentSentence.collectAsStateWithLifecycle()
     val isContinuousScroll by viewModel.isContinuousScroll.collectAsStateWithLifecycle()
+    val is4KUltraClarityEnabled by viewModel.is4KUltraClarityEnabled.collectAsStateWithLifecycle()
+    val is4KActive by viewModel.is4KActive.collectAsStateWithLifecycle()
     val isSearchActive by viewModel.isSearchActive.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
@@ -123,6 +128,11 @@ fun ReaderScreen(viewModel: PdfViewModel) {
     var showSignaturePicker by remember { mutableStateOf(false) }
     var selectedSignatureJson by remember { mutableStateOf<String?>(null) }
     var showOptionsMenu by remember { mutableStateOf(false) }
+
+    val activeThemeStyle by ThemeManager.currentTheme.collectAsStateWithLifecycle()
+    val themeColorScheme = ThemeManager.getColorScheme(activeThemeStyle)
+    val themePrimary = themeColorScheme.primary
+    val isLiquidTheme = activeThemeStyle == AppThemeStyle.LIQUID_GLASS || activeThemeStyle == AppThemeStyle.FROSTED_CRYSTAL
 
     // Zoom & Pan state
     var scale by remember { mutableFloatStateOf(1f) }
@@ -164,11 +174,31 @@ fun ReaderScreen(viewModel: PdfViewModel) {
         }
     }
 
+    // Lock 60 FPS display target refresh rate when viewing documents
+    LaunchedEffect(Unit) {
+        val activity = context as? Activity
+        if (activity != null) {
+            DisplayRefreshRateManager.setTargetRefreshRate(activity, 60)
+        } else {
+            DisplayRefreshRateManager.setPreferredRefreshRate(60)
+        }
+    }
+
     // Trigger rendering of active page + pre-fetch adjacent pages for smooth 60 FPS slide transitions
     LaunchedEffect(currentPage, currentDoc, totalPages) {
+        scale = 1f
+        offsetX = 0f
+        offsetY = 0f
         viewModel.renderPage(currentPage)
         if (currentPage + 1 < totalPages) viewModel.renderPage(currentPage + 1)
         if (currentPage - 1 >= 0) viewModel.renderPage(currentPage - 1)
+    }
+
+    // Auto-4K Ultra-Clarity Engine: Re-render page at super high DPI when user zooms in
+    LaunchedEffect(scale, currentPage) {
+        if (scale > 1.25f && is4KUltraClarityEnabled) {
+            viewModel.renderPageHighRes(currentPage, scale)
+        }
     }
 
     val pageAnnotations = remember(annotations, currentPage) {
@@ -237,13 +267,11 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             }
                         },
                         navigationIcon = {
-                            IconButton(
-                                onClick = { viewModel.navigateTo(AppScreen.HOME) },
-                                modifier = Modifier.testTag("reader_back_button")
-                            ) {
-                                com.example.ui.components.AdfIcon.ChevronLeft(
-                                    size = 22.dp,
-                                    color = AcrobatTextPrimary
+                            Box(modifier = Modifier.padding(start = 8.dp, end = 4.dp)) {
+                                CrystallineGlossyBackButton(
+                                    onClick = { viewModel.navigateTo(AppScreen.HOME) },
+                                    isLiquidTheme = isLiquidTheme,
+                                    primaryColor = themePrimary
                                 )
                             }
                         },
@@ -350,6 +378,23 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                         }
                                     )
                                     DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                                Text("4K Auto-Ultra Clarity", color = AcrobatTextPrimary, modifier = Modifier.weight(1f))
+                                                if (is4KUltraClarityEnabled) {
+                                                    Text("ON", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                                                } else {
+                                                    Text("OFF", color = AcrobatTextMuted, fontSize = 11.sp, fontWeight = FontWeight.Normal)
+                                                }
+                                            }
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF10B981)) },
+                                        onClick = {
+                                            showOptionsMenu = false
+                                            viewModel.toggle4KUltraClarityEngine()
+                                        }
+                                    )
+                                    DropdownMenuItem(
                                         text = { Text("Liquid Mode Reflow", color = AcrobatTextPrimary) },
                                         leadingIcon = { Icon(Icons.Default.WaterDrop, contentDescription = null, tint = Color(0xFF38BDF8)) },
                                         onClick = {
@@ -444,7 +489,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = AcrobatDarkBackground
+                            containerColor = if (isLiquidTheme) Color.Transparent else AcrobatDarkBackground
                         )
                     )
 
@@ -556,8 +601,10 @@ fun ReaderScreen(viewModel: PdfViewModel) {
 
                 // Page Navigation Bar
                 Surface(
-                    color = AcrobatDarkSurface,
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(AcrobatDarkBorder))
+                    color = if (isLiquidTheme) GlassSurfaceDark else themeColorScheme.surface,
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = if (isLiquidTheme) LiquidGlassBorderGradient else androidx.compose.ui.graphics.SolidColor(AcrobatDarkBorder)
+                    )
                 ) {
                     Row(
                         modifier = Modifier
@@ -574,7 +621,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Previous Page",
-                                tint = if (currentPage > 0) AcrobatTextPrimary else AcrobatTextMuted
+                                tint = if (currentPage > 0) themePrimary else AcrobatTextMuted
                             )
                         }
 
@@ -587,9 +634,9 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             valueRange = 1f..totalPages.coerceAtLeast(1).toFloat(),
                             steps = if (totalPages > 2) totalPages - 2 else 0,
                             colors = SliderDefaults.colors(
-                                thumbColor = CrimsonPrimary,
-                                activeTrackColor = CrimsonPrimary,
-                                inactiveTrackColor = AcrobatDarkSurfaceVariant
+                                thumbColor = themePrimary,
+                                activeTrackColor = themePrimary,
+                                inactiveTrackColor = themePrimary.copy(alpha = 0.25f)
                             ),
                             modifier = Modifier
                                 .weight(1f)
@@ -598,8 +645,8 @@ fun ReaderScreen(viewModel: PdfViewModel) {
 
                         Text(
                             text = "${currentPage + 1} / $totalPages",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = AcrobatTextPrimary,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = if (isLiquidTheme) Color.White else themeColorScheme.onSurface,
                             modifier = Modifier.widthIn(min = 48.dp),
                             textAlign = TextAlign.Center
                         )
@@ -613,7 +660,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                 contentDescription = "Next Page",
-                                tint = if (currentPage < totalPages - 1) AcrobatTextPrimary else AcrobatTextMuted
+                                tint = if (currentPage < totalPages - 1) themePrimary else AcrobatTextMuted
                             )
                         }
                     }
@@ -621,7 +668,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
             }
         }
     },
-        containerColor = when (colorFilter) {
+        containerColor = if (isLiquidTheme) Color.Transparent else when (colorFilter) {
             "NIGHT" -> Color(0xFF0F0F12)
             "SEPIA" -> Color(0xFF382F24)
             else -> Color(0xFF1E1E24)
@@ -643,6 +690,10 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                 ) {
                     items(count = totalPages) { pageIdx ->
                         val pageBmp = pageBitmaps[pageIdx]
+                        var cardScale by remember { mutableFloatStateOf(1f) }
+                        var cardOffsetX by remember { mutableFloatStateOf(0f) }
+                        var cardOffsetY by remember { mutableFloatStateOf(0f) }
+
                         LaunchedEffect(pageIdx) {
                             if (pageBmp == null) viewModel.renderPage(pageIdx)
                         }
@@ -653,6 +704,43 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .widthIn(max = 680.dp)
+                                .graphicsLayer(
+                                    scaleX = cardScale,
+                                    scaleY = cardScale,
+                                    translationX = cardOffsetX,
+                                    translationY = cardOffsetY
+                                )
+                                .pointerInput(Unit) {
+                                    detectTransformGestures { _, pan, zoom, _ ->
+                                        val newZoom = (cardScale * zoom).coerceIn(1f, 5f)
+                                        cardScale = newZoom
+                                        if (newZoom > 1.05f) {
+                                            val maxPanX = (size.width * (newZoom - 1f) / 2f).coerceAtLeast(0f)
+                                            val maxPanY = (size.height * (newZoom - 1f) / 2f).coerceAtLeast(0f)
+                                            cardOffsetX = (cardOffsetX + pan.x * 1.85f).coerceIn(-maxPanX, maxPanX)
+                                            cardOffsetY = (cardOffsetY + pan.y * 1.85f).coerceIn(-maxPanY, maxPanY)
+                                        } else {
+                                            cardScale = 1f
+                                            cardOffsetX = 0f
+                                            cardOffsetY = 0f
+                                        }
+                                    }
+                                }
+                                .pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onDoubleTap = {
+                                            if (cardScale > 1.2f) {
+                                                cardScale = 1f
+                                                cardOffsetX = 0f
+                                                cardOffsetY = 0f
+                                            } else {
+                                                cardScale = 2.5f
+                                                cardOffsetX = 0f
+                                                cardOffsetY = 0f
+                                            }
+                                        }
+                                    )
+                                }
                         ) {
                             Box(
                                 modifier = Modifier
@@ -710,65 +798,33 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             translationY = offsetY
                         )
                         // Gestures: When tools are NONE, pinch zoom & pan or horizontal slide between pages
-                        .pointerInput(activeTool, scale, currentPage, totalPages) {
+                        .pointerInput(activeTool) {
                             if (activeTool == AnnotationTool.NONE) {
-                                awaitEachGesture {
-                                    val down = awaitFirstDown(requireUnconsumed = false)
-                                    var totalDragX = 0f
-                                    var isMultiTouch = false
-                                    pageSlideOffset = 0f
-
-                                    do {
-                                        val event = awaitPointerEvent()
-                                        if (event.changes.size > 1) {
-                                            isMultiTouch = true
-                                            val p0 = event.changes[0]
-                                            val p1 = event.changes[1]
-                                            val currentDist = kotlin.math.hypot(p0.position.x - p1.position.x, p0.position.y - p1.position.y)
-                                            val prevDist = kotlin.math.hypot(p0.previousPosition.x - p1.previousPosition.x, p0.previousPosition.y - p1.previousPosition.y)
-                                            val zoom = if (prevDist > 0f) currentDist / prevDist else 1f
-                                            val pan = (p0.position - p0.previousPosition + p1.position - p1.previousPosition) / 2f
-                                            scale = (scale * zoom).coerceIn(1f, 4f)
-                                            if (scale > 1.05f) {
-                                                offsetX += pan.x
-                                                offsetY += pan.y
-                                            } else {
-                                                scale = 1f
-                                                offsetX = 0f
-                                                offsetY = 0f
+                                detectTransformGestures { _, pan, zoom, _ ->
+                                    val newScale = (scale * zoom).coerceIn(1f, 6f)
+                                    scale = newScale
+                                    if (newScale > 1.05f) {
+                                        val maxPanX = ((pageSizePx.width.toFloat() * newScale - pageSizePx.width.toFloat()) / 2f).coerceAtLeast(0f)
+                                        val maxPanY = ((pageSizePx.height.toFloat() * newScale - pageSizePx.height.toFloat()) / 2f).coerceAtLeast(0f)
+                                        offsetX = (offsetX + pan.x * 1.85f).coerceIn(-maxPanX, maxPanX)
+                                        offsetY = (offsetY + pan.y * 1.85f).coerceIn(-maxPanY, maxPanY)
+                                    } else {
+                                        scale = 1f
+                                        offsetX = 0f
+                                        offsetY = 0f
+                                        if (kotlin.math.abs(pan.x) > 10f) {
+                                            pageSlideOffset += pan.x
+                                            if (pageSlideOffset < -70f && currentPage < totalPages - 1) {
+                                                viewModel.setCurrentPage(currentPage + 1)
+                                                pageSlideOffset = 0f
+                                                hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                            } else if (pageSlideOffset > 70f && currentPage > 0) {
+                                                viewModel.setCurrentPage(currentPage - 1)
+                                                pageSlideOffset = 0f
+                                                hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                             }
-                                            event.changes.forEach { it.consume() }
-                                        } else if (!isMultiTouch) {
-                                            val change = event.changes.firstOrNull()
-                                            if (change != null && change.pressed) {
-                                                val pan = change.position - change.previousPosition
-                                                if (scale > 1.05f) {
-                                                    offsetX += pan.x
-                                                    offsetY += pan.y
-                                                    change.consume()
-                                                } else {
-                                                    totalDragX += pan.x
-                                                    pageSlideOffset = totalDragX
-                                                    if (kotlin.math.abs(totalDragX) > 12f) {
-                                                        change.consume()
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    } while (event.changes.any { it.pressed })
-
-                                    if (!isMultiTouch && scale <= 1.05f) {
-                                        if (totalDragX < -60f && currentPage < totalPages - 1) {
-                                            // Slid from right to left (finger moved left) -> Next Page (page number increases)
-                                            viewModel.setCurrentPage(currentPage + 1)
-                                            hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                        } else if (totalDragX > 60f && currentPage > 0) {
-                                            // Slid from left to right (finger moved right) -> Previous Page (page number decreases)
-                                            viewModel.setCurrentPage(currentPage - 1)
-                                            hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                         }
                                     }
-                                    pageSlideOffset = 0f
                                 }
                             }
                         }
@@ -1262,6 +1318,70 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // 4K Auto-Ultra Clarity Active Badge on Zoom
+                    if (scale > 1.2f && is4KUltraClarityEnabled) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0xF20F172A),
+                            border = CardDefaults.outlinedCardBorder().copy(
+                                brush = Brush.horizontalGradient(
+                                    listOf(AdfElectricCyan, Color(0xFF10B981))
+                                )
+                            ),
+                            shadowElevation = 8.dp,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 16.dp, end = 16.dp)
+                                .testTag("reader_4k_badge")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF10B981))
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "✨ 4K Ultra-Clarity Active (${String.format("%.1fx", scale)})",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
+                    }
+
+                    // In-Document Search Active Highlight Badge
+                    if (isSearchActive && searchQuery.isNotBlank() && searchResults.contains(currentPage)) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color(0xFFF59E0B),
+                            shadowElevation = 8.dp,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 16.dp)
+                                .testTag("search_match_highlight_badge")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.Search, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Match Found on Page ${currentPage + 1}: \"$searchQuery\"",
+                                    color = Color.Black,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.ExtraBold
                                 )
                             }
                         }
@@ -1915,5 +2035,79 @@ fun ReaderScreen(viewModel: PdfViewModel) {
             savedSignatures = signatures,
             onDismiss = { viewModel.showSignatureDialog(false) }
         )
+    }
+}
+
+/**
+ * Crystalline Specular 3D Glossy Liquid Glass Back Button
+ * Renders a glossy glass capsule lens when Liquid Theme is selected,
+ * and an adaptive clean back icon for other themes.
+ */
+@Composable
+fun CrystallineGlossyBackButton(
+    onClick: () -> Unit,
+    isLiquidTheme: Boolean,
+    primaryColor: Color = AdfElectricCyan,
+    modifier: Modifier = Modifier
+) {
+    if (isLiquidTheme) {
+        Surface(
+            onClick = onClick,
+            shape = RoundedCornerShape(14.dp),
+            color = Color(0x35FFFFFF),
+            border = androidx.compose.foundation.BorderStroke(
+                width = 1.2.dp,
+                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.9f),
+                        primaryColor.copy(alpha = 0.6f),
+                        Color.White.copy(alpha = 0.35f)
+                    )
+                )
+            ),
+            shadowElevation = 8.dp,
+            modifier = modifier
+                .size(42.dp)
+                .testTag("reader_back_button")
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                // Specular Glass Glossy Arc Reflection
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.48f)
+                        .align(Alignment.TopCenter)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(
+                                    Color.White.copy(alpha = 0.55f),
+                                    Color.White.copy(alpha = 0.08f)
+                                )
+                            )
+                        )
+                )
+
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    } else {
+        IconButton(
+            onClick = onClick,
+            modifier = modifier.testTag("reader_back_button")
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }

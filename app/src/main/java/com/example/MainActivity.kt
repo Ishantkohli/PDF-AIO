@@ -13,10 +13,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Feedback
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.fps.DisplayRefreshRateManager
@@ -43,14 +52,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Initialize hardware display refresh rates (60/90/120/144/165 FPS)
+        // Initialize hardware display refresh rates and enforce 60 FPS lock
         DisplayRefreshRateManager.initialize(this)
-        com.example.ui.theme.ThemeManager.initialize(this)
+        DisplayRefreshRateManager.lock60Fps(this)
+        ThemeManager.initialize(this)
         FpsMonitor.start()
 
         setContent {
-            val activeThemeStyle by com.example.ui.theme.ThemeManager.currentTheme.collectAsStateWithLifecycle()
-            AcrobatTheme(colorScheme = com.example.ui.theme.ThemeManager.getColorScheme(activeThemeStyle)) {
+            val activeThemeStyle by ThemeManager.currentTheme.collectAsStateWithLifecycle()
+            AcrobatTheme(colorScheme = ThemeManager.getColorScheme(activeThemeStyle)) {
                 val viewModel: PdfViewModel = viewModel()
                 val updateViewModel: com.example.update.UpdateViewModel = viewModel()
                 val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
@@ -67,7 +77,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 // Global BackHandler: Navigate back to Home from secondary tabs
-                if (currentScreen in listOf(AppScreen.CONVERSION_HUB, AppScreen.SIGNATURE_VAULT, AppScreen.CREDITS)) {
+                if (currentScreen in listOf(AppScreen.CONVERSION_HUB, AppScreen.SIGNATURE_VAULT, AppScreen.SUPPORT, AppScreen.CREDITS, AppScreen.FEEDBACK)) {
                     BackHandler {
                         viewModel.navigateTo(AppScreen.HOME)
                     }
@@ -113,215 +123,198 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Scaffold(
-                    snackbarHost = { SnackbarHost(snackbarHostState) },
-                    bottomBar = {
-                        val isMainTab = currentScreen in listOf(
-                            AppScreen.HOME,
-                            AppScreen.CONVERSION_HUB,
-                            AppScreen.SIGNATURE_VAULT,
-                            AppScreen.CREDITS
-                        )
-                        if (isMainTab) {
-                            NavigationBar(
-                                containerColor = AdfSurfaceCard,
-                                tonalElevation = 8.dp,
-                                modifier = Modifier
-                                    .border(width = 0.5.dp, color = AdfBorderSubtle)
-                                    .testTag("main_bottom_nav_bar")
-                            ) {
-                                NavigationBarItem(
-                                    selected = currentScreen == AppScreen.HOME,
-                                    onClick = { viewModel.navigateTo(AppScreen.HOME) },
-                                    icon = {
-                                        AdfIcon.FileOpen(
-                                            size = 20.dp,
-                                            primaryColor = if (currentScreen == AppScreen.HOME) AdfElectricCyan else AdfTextMuted,
-                                            accentColor = if (currentScreen == AppScreen.HOME) AdfVibrantBlue else AdfTextMuted
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "Documents",
-                                            fontSize = 11.sp,
-                                            fontWeight = if (currentScreen == AppScreen.HOME) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = AdfElectricCyan,
-                                        selectedTextColor = AdfElectricCyan,
-                                        indicatorColor = AdfElectricCyan.copy(alpha = 0.15f),
-                                        unselectedIconColor = AdfTextMuted,
-                                        unselectedTextColor = AdfTextMuted
-                                    ),
-                                    modifier = Modifier.testTag("nav_tab_documents")
-                                )
-                                NavigationBarItem(
-                                    selected = currentScreen == AppScreen.SCANNER,
-                                    onClick = { viewModel.navigateTo(AppScreen.SCANNER) },
-                                    icon = {
-                                        AdfIcon.Camera(
-                                            size = 20.dp,
-                                            primaryColor = if (currentScreen == AppScreen.SCANNER) AdfElectricCyan else AdfTextMuted,
-                                            accentColor = if (currentScreen == AppScreen.SCANNER) AdfCoral else AdfTextMuted
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "Scan",
-                                            fontSize = 11.sp,
-                                            fontWeight = if (currentScreen == AppScreen.SCANNER) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = AdfElectricCyan,
-                                        selectedTextColor = AdfElectricCyan,
-                                        indicatorColor = AdfElectricCyan.copy(alpha = 0.15f),
-                                        unselectedIconColor = AdfTextMuted,
-                                        unselectedTextColor = AdfTextMuted
-                                    ),
-                                    modifier = Modifier.testTag("nav_tab_scan")
-                                )
-                                NavigationBarItem(
-                                    selected = currentScreen == AppScreen.CONVERSION_HUB,
-                                    onClick = { viewModel.navigateTo(AppScreen.CONVERSION_HUB) },
-                                    icon = {
-                                        AdfIcon.Conversion(
-                                            size = 20.dp,
-                                            primaryColor = if (currentScreen == AppScreen.CONVERSION_HUB) AdfElectricCyan else AdfTextMuted,
-                                            secondaryColor = if (currentScreen == AppScreen.CONVERSION_HUB) AdfVibrantBlue else AdfTextMuted,
-                                            isAnimated = currentScreen == AppScreen.CONVERSION_HUB
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "Converter",
-                                            fontSize = 11.sp,
-                                            fontWeight = if (currentScreen == AppScreen.CONVERSION_HUB) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = AdfElectricCyan,
-                                        selectedTextColor = AdfElectricCyan,
-                                        indicatorColor = AdfElectricCyan.copy(alpha = 0.15f),
-                                        unselectedIconColor = AdfTextMuted,
-                                        unselectedTextColor = AdfTextMuted
-                                    ),
-                                    modifier = Modifier.testTag("nav_tab_converter")
-                                )
-                                NavigationBarItem(
-                                    selected = currentScreen == AppScreen.SIGNATURE_VAULT,
-                                    onClick = { viewModel.navigateTo(AppScreen.SIGNATURE_VAULT) },
-                                    icon = {
-                                        AdfIcon.SignatureVault(
-                                            size = 20.dp,
-                                            primaryColor = if (currentScreen == AppScreen.SIGNATURE_VAULT) AdfElectricCyan else AdfTextMuted,
-                                            accentColor = if (currentScreen == AppScreen.SIGNATURE_VAULT) AdfCyberViolet else AdfTextMuted
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "Signature",
-                                            fontSize = 11.sp,
-                                            fontWeight = if (currentScreen == AppScreen.SIGNATURE_VAULT) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = AdfElectricCyan,
-                                        selectedTextColor = AdfElectricCyan,
-                                        indicatorColor = AdfElectricCyan.copy(alpha = 0.15f),
-                                        unselectedIconColor = AdfTextMuted,
-                                        unselectedTextColor = AdfTextMuted
-                                    ),
-                                    modifier = Modifier.testTag("nav_tab_signature")
-                                )
-                                NavigationBarItem(
-                                    selected = currentScreen == AppScreen.CREDITS,
-                                    onClick = { viewModel.navigateTo(AppScreen.CREDITS) },
-                                    icon = {
-                                        AdfIcon.Star(
-                                            size = 20.dp,
-                                            isFilled = currentScreen == AppScreen.CREDITS,
-                                            fillColor = if (currentScreen == AppScreen.CREDITS) AdfElectricCyan else AdfTextMuted,
-                                            outlineColor = if (currentScreen == AppScreen.CREDITS) AdfElectricCyan else AdfTextMuted
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "Developer",
-                                            fontSize = 11.sp,
-                                            fontWeight = if (currentScreen == AppScreen.CREDITS) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = AdfElectricCyan,
-                                        selectedTextColor = AdfElectricCyan,
-                                        indicatorColor = AdfElectricCyan.copy(alpha = 0.15f),
-                                        unselectedIconColor = AdfTextMuted,
-                                        unselectedTextColor = AdfTextMuted
-                                    ),
-                                    modifier = Modifier.testTag("nav_tab_credits")
-                                )
-                            }
-                        }
-                    },
-                    contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
-                    modifier = Modifier.fillMaxSize()
-                ) { innerPadding ->
-                    Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                        AnimatedContent(
-                            targetState = currentScreen,
-                            label = "ScreenTransition",
-                            transitionSpec = {
-                                fadeIn() togetherWith fadeOut()
-                            }
-                        ) { screen ->
-                            when (screen) {
-                                AppScreen.BOOTUP_SHOWCASE -> BootupShowcaseScreen(
-                                    viewModel = viewModel,
-                                    onFinishBootup = { viewModel.navigateTo(AppScreen.HOME) }
-                                )
-                                AppScreen.HOME -> HomeScreen(viewModel = viewModel, updateViewModel = updateViewModel)
-                                AppScreen.SCANNER -> DocumentScannerScreen(
-                                    viewModel = viewModel,
-                                    onBack = { viewModel.navigateTo(AppScreen.HOME) }
-                                )
-                                AppScreen.CONVERSION_HUB -> ConversionHubScreen(
-                                    viewModel = viewModel,
-                                    onSelectConversion = { targetTab ->
-                                        viewModel.setSelectedToolTab(targetTab)
-                                        viewModel.navigateTo(AppScreen.TOOLS)
-                                    },
-                                    onBack = { viewModel.navigateTo(AppScreen.HOME) }
-                                )
-                                AppScreen.READER -> ReaderScreen(viewModel = viewModel)
-                                AppScreen.TOOLS -> ToolsScreen(viewModel = viewModel)
-                                AppScreen.SIGNATURE_VAULT -> SignatureVaultScreen(viewModel = viewModel)
-                                AppScreen.PAGE_MANAGER -> PageManagerScreen(viewModel = viewModel)
-                                AppScreen.CREDITS -> CreditScreen(
-                                    viewModel = viewModel,
-                                    updateViewModel = updateViewModel,
-                                    onBack = { viewModel.navigateTo(AppScreen.HOME) }
-                                )
-                                AppScreen.PDF_DIFF -> com.example.ui.screens.PdfDiffScreen(
-                                    viewModel = viewModel,
-                                    onBack = { viewModel.navigateTo(AppScreen.HOME) }
-                                )
-                            }
-                        }
+                val isLiquidTheme = activeThemeStyle == AppThemeStyle.LIQUID_GLASS || activeThemeStyle == AppThemeStyle.FROSTED_CRYSTAL
 
-                        // Real-time On-Screen FPS HUD (if enabled in settings)
-                        if (showFpsHud && currentScreen != AppScreen.BOOTUP_SHOWCASE) {
-                            RealTimeFpsHud(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(top = 48.dp, end = 16.dp)
+                val appMainContent = @Composable {
+                    Scaffold(
+                        containerColor = if (isLiquidTheme) Color.Transparent else MaterialTheme.colorScheme.background,
+                        snackbarHost = { SnackbarHost(snackbarHostState) },
+                        bottomBar = {
+                            val isMainTab = currentScreen in listOf(
+                                AppScreen.HOME,
+                                AppScreen.CONVERSION_HUB,
+                                AppScreen.SIGNATURE_VAULT,
+                                AppScreen.SUPPORT,
+                                AppScreen.CREDITS,
+                                AppScreen.FEEDBACK
                             )
-                        }
+                            if (isMainTab) {
+                                Surface(
+                                    color = if (isLiquidTheme) GlassSurfaceDark else AdfSurfaceCard,
+                                    tonalElevation = 8.dp,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(
+                                            width = 1.dp,
+                                            brush = if (isLiquidTheme) LiquidGlassBorderGradient else Brush.horizontalGradient(listOf(AdfBorderSubtle, AdfBorderSubtle)),
+                                            shape = RectangleShape
+                                        )
+                                        .testTag("main_bottom_nav_bar")
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(72.dp)
+                                            .horizontalScroll(rememberScrollState())
+                                            .padding(horizontal = 6.dp),
+                                        horizontalArrangement = Arrangement.SpaceEvenly,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        val navTabs = listOf(
+                                            Triple(AppScreen.HOME, "Documents", "nav_tab_documents"),
+                                            Triple(AppScreen.SCANNER, "Scan", "nav_tab_scan"),
+                                            Triple(AppScreen.CONVERSION_HUB, "Converter", "nav_tab_converter"),
+                                            Triple(AppScreen.SIGNATURE_VAULT, "Signature", "nav_tab_signature"),
+                                            Triple(AppScreen.SUPPORT, "Support", "nav_tab_support"),
+                                            Triple(AppScreen.CREDITS, "Developer", "nav_tab_credits"),
+                                            Triple(AppScreen.FEEDBACK, "Feedback", "nav_tab_feedback")
+                                        )
 
-                        // In-App Update Dialogs & Download Progress Overlay Host
-                        com.example.update.UpdateOverlayHost(viewModel = updateViewModel)
+                                        navTabs.forEach { (screen, label, tag) ->
+                                            val isSelected = currentScreen == screen
+                                            Surface(
+                                                onClick = { viewModel.navigateTo(screen) },
+                                                color = if (isSelected) AdfElectricCyan.copy(alpha = 0.15f) else Color.Transparent,
+                                                shape = RoundedCornerShape(14.dp),
+                                                modifier = Modifier
+                                                    .padding(horizontal = 4.dp, vertical = 6.dp)
+                                                    .widthIn(min = 74.dp)
+                                                    .testTag(tag)
+                                            ) {
+                                                Column(
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    verticalArrangement = Arrangement.Center,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                ) {
+                                                    when (screen) {
+                                                        AppScreen.HOME -> AdfIcon.FileOpen(
+                                                            size = 20.dp,
+                                                            primaryColor = if (isSelected) AdfElectricCyan else AdfTextMuted,
+                                                            accentColor = if (isSelected) AdfVibrantBlue else AdfTextMuted
+                                                        )
+                                                        AppScreen.SCANNER -> AdfIcon.Camera(
+                                                            size = 20.dp,
+                                                            primaryColor = if (isSelected) AdfElectricCyan else AdfTextMuted,
+                                                            accentColor = if (isSelected) AdfCoral else AdfTextMuted
+                                                        )
+                                                        AppScreen.CONVERSION_HUB -> AdfIcon.Conversion(
+                                                            size = 20.dp,
+                                                            primaryColor = if (isSelected) AdfElectricCyan else AdfTextMuted,
+                                                            secondaryColor = if (isSelected) AdfVibrantBlue else AdfTextMuted,
+                                                            isAnimated = isSelected
+                                                        )
+                                                        AppScreen.SIGNATURE_VAULT -> AdfIcon.SignatureVault(
+                                                            size = 20.dp,
+                                                            primaryColor = if (isSelected) AdfElectricCyan else AdfTextMuted,
+                                                            accentColor = if (isSelected) AdfCyberViolet else AdfTextMuted
+                                                        )
+                                                        AppScreen.SUPPORT -> Icon(
+                                                            imageVector = Icons.Default.VolunteerActivism,
+                                                            contentDescription = "Support",
+                                                            tint = if (isSelected) AdfElectricCyan else AdfTextMuted,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                        AppScreen.CREDITS -> AdfIcon.Star(
+                                                            size = 20.dp,
+                                                            isFilled = isSelected,
+                                                            fillColor = if (isSelected) AdfElectricCyan else AdfTextMuted,
+                                                            outlineColor = if (isSelected) AdfElectricCyan else AdfTextMuted
+                                                        )
+                                                        AppScreen.FEEDBACK -> Icon(
+                                                            imageVector = Icons.Default.Feedback,
+                                                            contentDescription = "Feedback",
+                                                            tint = if (isSelected) AdfElectricCyan else AdfTextMuted,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                        else -> {}
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(
+                                                        text = label,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                        color = if (isSelected) AdfElectricCyan else AdfTextMuted,
+                                                        maxLines = 1,
+                                                        softWrap = false
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
+                        modifier = Modifier.fillMaxSize()
+                    ) { innerPadding ->
+                        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                            AnimatedContent(
+                                targetState = currentScreen,
+                                label = "ScreenTransition",
+                                transitionSpec = {
+                                    fadeIn() togetherWith fadeOut()
+                                }
+                            ) { screen ->
+                                when (screen) {
+                                    AppScreen.BOOTUP_SHOWCASE -> BootupShowcaseScreen(
+                                        viewModel = viewModel,
+                                        onFinishBootup = { viewModel.navigateTo(AppScreen.HOME) }
+                                    )
+                                    AppScreen.HOME -> HomeScreen(viewModel = viewModel, updateViewModel = updateViewModel)
+                                    AppScreen.SCANNER -> DocumentScannerScreen(
+                                        viewModel = viewModel,
+                                        onBack = { viewModel.navigateTo(AppScreen.HOME) }
+                                    )
+                                    AppScreen.CONVERSION_HUB -> ConversionHubScreen(
+                                        viewModel = viewModel,
+                                        onSelectConversion = { targetTab ->
+                                            viewModel.setSelectedToolTab(targetTab)
+                                            viewModel.navigateTo(AppScreen.TOOLS)
+                                        },
+                                        onBack = { viewModel.navigateTo(AppScreen.HOME) }
+                                    )
+                                    AppScreen.READER -> ReaderScreen(viewModel = viewModel)
+                                    AppScreen.TOOLS -> ToolsScreen(viewModel = viewModel)
+                                    AppScreen.SIGNATURE_VAULT -> SignatureVaultScreen(viewModel = viewModel)
+                                    AppScreen.PAGE_MANAGER -> PageManagerScreen(viewModel = viewModel)
+                                    AppScreen.CREDITS -> CreditScreen(
+                                        viewModel = viewModel,
+                                        updateViewModel = updateViewModel,
+                                        onBack = { viewModel.navigateTo(AppScreen.HOME) }
+                                    )
+                                    AppScreen.SUPPORT -> com.example.ui.screens.SupportDonateScreen(
+                                        viewModel = viewModel,
+                                        onBack = { viewModel.navigateTo(AppScreen.HOME) }
+                                    )
+                                    AppScreen.FEEDBACK -> com.example.ui.screens.FeedbackScreen(
+                                        viewModel = viewModel,
+                                        onBack = { viewModel.navigateTo(AppScreen.HOME) }
+                                    )
+                                    AppScreen.PDF_DIFF -> com.example.ui.screens.PdfDiffScreen(
+                                        viewModel = viewModel,
+                                        onBack = { viewModel.navigateTo(AppScreen.HOME) }
+                                    )
+                                    AppScreen.PPT_VIEWER -> com.example.ui.screens.PptViewerScreen(
+                                        viewModel = viewModel,
+                                        onBack = { viewModel.closePresentation() }
+                                    )
+                                }
+                            }
+
+
+
+                            // In-App Update Dialogs & Download Progress Overlay Host
+                            com.example.update.UpdateOverlayHost(viewModel = updateViewModel)
+                        }
                     }
+                }
+
+                if (isLiquidTheme) {
+                    LiquidGlassBackground {
+                        appMainContent()
+                    }
+                } else {
+                    appMainContent()
                 }
             }
         }
@@ -344,7 +337,7 @@ class MainActivity : ComponentActivity() {
     ) {
         if (intent == null) return
 
-        // Handle launcher shortcuts
+        // Handle launcher shortcuts & home screen widget deep links
         val shortcutAction = intent.getStringExtra("shortcut_action")
         when (shortcutAction) {
             "open_scanner" -> {
@@ -357,6 +350,38 @@ class MainActivity : ComponentActivity() {
             }
             "open_conversion" -> {
                 viewModel.navigateTo(AppScreen.CONVERSION_HUB)
+                return
+            }
+            "open_images_to_pdf" -> {
+                viewModel.setSelectedToolTab(0)
+                viewModel.navigateTo(AppScreen.TOOLS)
+                return
+            }
+            "open_pdf_to_images" -> {
+                viewModel.setSelectedToolTab(1)
+                viewModel.navigateTo(AppScreen.TOOLS)
+                return
+            }
+            "open_word_to_pdf" -> {
+                viewModel.setSelectedToolTab(2)
+                viewModel.navigateTo(AppScreen.TOOLS)
+                return
+            }
+            "open_pdf_to_word" -> {
+                viewModel.setSelectedToolTab(3)
+                viewModel.navigateTo(AppScreen.TOOLS)
+                return
+            }
+            "open_credits", "open_developer" -> {
+                viewModel.navigateTo(AppScreen.CREDITS)
+                return
+            }
+            "open_support", "open_donate" -> {
+                viewModel.navigateTo(AppScreen.SUPPORT)
+                return
+            }
+            "open_feedback" -> {
+                viewModel.navigateTo(AppScreen.FEEDBACK)
                 return
             }
         }

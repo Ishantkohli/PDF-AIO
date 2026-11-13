@@ -79,8 +79,9 @@ fun CreditScreen(
     updateViewModel: UpdateViewModel? = null,
     onBack: () -> Unit
 ) {
-    BackHandler { onBack() }
     val context = LocalContext.current
+    val activeThemeStyle by ThemeManager.currentTheme.collectAsStateWithLifecycle()
+    val isLiquidTheme = activeThemeStyle == AppThemeStyle.LIQUID_GLASS || activeThemeStyle == AppThemeStyle.FROSTED_CRYSTAL
 
     val platforms = remember {
         listOf(
@@ -162,10 +163,10 @@ fun CreditScreen(
                         AdfIcon.Crown(size = 22.dp, color = AdfElectricCyan)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AdfMidnightBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = if (isLiquidTheme) Color.Transparent else AdfMidnightBackground)
             )
         },
-        containerColor = AdfMidnightBackground
+        containerColor = if (isLiquidTheme) Color.Transparent else AdfMidnightBackground
     ) { padding ->
         Box(
             modifier = Modifier
@@ -202,6 +203,11 @@ fun CreditScreen(
                             context.startActivity(intent)
                         }
                     )
+                }
+
+                // Section 1.1: Feedback Form Section (Directly after Developer section)
+                item {
+                    com.example.ui.components.FeedbackFormCard()
                 }
 
                 // Section 1.5: Offline QR Share App & Download Card

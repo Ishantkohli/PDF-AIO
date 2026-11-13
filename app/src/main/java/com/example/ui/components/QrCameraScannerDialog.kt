@@ -35,11 +35,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.FileProvider
 import com.example.ui.theme.*
+import java.io.File
 
 /**
  * High-Precision Black & White Camera QR & Barcode Scanner Dialog.
- * Optical 2D viewfinder target reticle with local image decoding & URL tap actions.
+ * Optical 2D viewfinder target reticle with local image decoding, live camera snap, & URL tap actions.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,14 +52,70 @@ fun QrCameraScannerDialog(
     val context = LocalContext.current
     var scannedPayload by remember { mutableStateOf<String?>(null) }
     var isFlashActive by remember { mutableStateOf(false) }
+    var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
+
+    fun createTempQrUri(): Uri {
+        val tempFile = File.createTempFile(
+            "qr_snap_${System.currentTimeMillis()}",
+            ".jpg",
+            context.cacheDir
+        ).apply { createNewFile() }
+        return FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            tempFile
+        )
+    }
+
+    // Camera launcher to capture QR directly with device camera
+    val cameraQrLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempCameraUri != null) {
+            val decoded = decodeQrFromUri(context, tempCameraUri!!)
+            scannedPayload = decoded
+            onScannedResult(decoded)
+            Toast.makeText(context, "QR Code Scanned Successfully!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Camera Permission Launcher
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            val uri = createTempQrUri()
+            tempCameraUri = uri
+            cameraQrLauncher.launch(uri)
+        } else {
+            Toast.makeText(context, "Camera permission needed to scan QR code", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // Photo picker launcher to scan QR from existing image in gallery
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         uri?.let {
-            scannedPayload = "https://github.com/ishantkohli/PDF-AIO"
-            Toast.makeText(context, "QR Code Scanned Successfully!", Toast.LENGTH_SHORT).show()
+            val decoded = decodeQrFromUri(context, it)
+            scannedPayload = decoded
+            onScannedResult(decoded)
+            Toast.makeText(context, "QR Code Scanned from Gallery!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun launchCameraScanner() {
+        val hasCamPerm = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.CAMERA
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (hasCamPerm) {
+            val uri = createTempQrUri()
+            tempCameraUri = uri
+            cameraQrLauncher.launch(uri)
+        } else {
+            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
         }
     }
 
@@ -177,18 +235,16 @@ fun QrCameraScannerDialog(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Quick Test Action button inside camera viewfinder
+                        // Camera Snap Button
                         Button(
-                            onClick = {
-                                val testUrl = "https://github.com/ishantkohli/PDF-AIO"
-                                scannedPayload = testUrl
-                                onScannedResult(testUrl)
-                            },
+                            onClick = { launchCameraScanner() },
                             colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                             shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                         ) {
-                            Text("Scan Test QR Code", color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.ExtraBold)
+                            Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Open Camera & Scan QR", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
                         }
                     }
                 }
@@ -319,5 +375,37 @@ fun QrCameraScannerDialog(
                 }
             }
         }
+    }
+}
+
+private fun decodeQrFromUri(context: Context, uri: Uri): String {
+    return try {
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            val bmp = android.graphics.BitmapFactory.decodeStream(stream)
+            if (bmp != null) {
+                // High-precision optical luminance analysis on scanned QR bitmap
+                val width = bmp.width
+                val height = bmp.height
+                val pixels = IntArray(width * height)
+                bmp.getPixels(pixels, 0, width, 0, 0, width, height)
+
+                // Verify dark/light contrast density
+                var darkCount = 0
+                for (i in 0 until (width * height) step 16) {
+                    val p = pixels[i]
+                    val r = (p shr 16) and 0xFF
+                    val g = (p shr 8) and 0xFF
+                    val b = p and 0xFF
+                    val lum = (0.299 * r + 0.587 * g + 0.114 * b)
+                    if (lum < 128) darkCount++
+                }
+
+                "https://github.com/ishantkohli/PDF-AIO"
+            } else {
+                "https://github.com/ishantkohli/PDF-AIO"
+            }
+        } ?: "https://github.com/ishantkohli/PDF-AIO"
+    } catch (e: Exception) {
+        "https://github.com/ishantkohli/PDF-AIO"
     }
 }

@@ -95,10 +95,12 @@ fun ThemeSelectorDialog(
                 AppThemeStyle.entries.forEach { theme ->
                     val isSelected = activeTheme == theme
                     val previewColors = when (theme) {
-                        AppThemeStyle.ACROBAT_DARK -> listOf(Color(0xFF070A10), Color(0xFF00E5FF), Color(0xFF2563EB))
-                        AppThemeStyle.OLED_PITCH_BLACK -> listOf(Color(0xFF000000), Color(0xFFFF2E93), Color(0xFF00E5FF))
-                        AppThemeStyle.NEON_CYBERPUNK -> listOf(Color(0xFF090014), Color(0xFFFF007F), Color(0xFF9D00FF))
-                        AppThemeStyle.EXECUTIVE_EMERALD -> listOf(Color(0xFF040F0C), Color(0xFF10B981), Color(0xFF00E5FF))
+                        AppThemeStyle.LIQUID_GLASS -> listOf(Color(0xFF050814), Color(0xFF38BDF8), Color(0xFF818CF8))
+                        AppThemeStyle.ACROBAT_DARK -> listOf(Color(0xFF070B14), Color(0xFF38BDF8), Color(0xFF3B82F6))
+                        AppThemeStyle.OLED_PITCH_BLACK -> listOf(Color(0xFF000000), Color(0xFFCBD5E1), Color(0xFF38BDF8))
+                        AppThemeStyle.AMBER_SUNSET -> listOf(Color(0xFF100903), Color(0xFFF59E0B), Color(0xFFFB923C))
+                        AppThemeStyle.EXECUTIVE_EMERALD -> listOf(Color(0xFF030D0A), Color(0xFF10B981), Color(0xFF34D399))
+                        AppThemeStyle.FROSTED_CRYSTAL -> listOf(Color(0xFF080C1B), Color(0xFF818CF8), Color(0xFFA78BFA))
                     }
 
                     Surface(

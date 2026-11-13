@@ -66,10 +66,10 @@ fun BootupShowcaseScreen(
     val context = LocalContext.current
     val activity = context as? Activity
 
-    // Lock display to 30 FPS during bootup
+    // Lock display to 60 FPS during bootup
     DisposableEffect(Unit) {
         if (activity != null) {
-            DisplayRefreshRateManager.lock30Fps(activity)
+            DisplayRefreshRateManager.lock60Fps(activity)
         }
         onDispose {
             if (activity != null) {
@@ -80,12 +80,12 @@ fun BootupShowcaseScreen(
 
     val maxHardwareFps by DisplayRefreshRateManager.maxHardwareFps.collectAsStateWithLifecycle()
 
-    // STRICT 30 FPS FRAME TICKER (33.33ms per frame tick)
+    // STRICT 60 FPS FRAME TICKER (16.66ms per frame tick)
     var frameCount by remember { mutableIntStateOf(0) }
-    val totalShowcaseFrames = 420 // ~14 seconds at 30 FPS
+    val totalShowcaseFrames = 600 // ~10 seconds at 60 FPS
 
     LaunchedEffect(Unit) {
-        val targetFrameDurationMs = 33L // 30.3 FPS lock
+        val targetFrameDurationMs = 16L // 60 FPS lock
         while (isActive) {
             val startTime = System.currentTimeMillis()
             frameCount++
@@ -100,13 +100,13 @@ fun BootupShowcaseScreen(
         }
     }
 
-    // Determine current showcase stage based on frame count (each stage is 75 frames = 2.5s)
+    // Determine current showcase stage based on frame count (each stage is 100 frames = 1.66s at 60 FPS)
     val currentStageIndex = when {
-        frameCount < 75 -> 0  // Brand Genesis & Display Mode Lock
-        frameCount < 150 -> 1 // PDF Ultra Engine
-        frameCount < 225 -> 2 // Universal Converter
-        frameCount < 300 -> 3 // Content Editor & Whiteout
-        frameCount < 375 -> 4 // Signatures & Custom Watermark
+        frameCount < 100 -> 0 // Brand Genesis & Display Mode Lock
+        frameCount < 200 -> 1 // PDF Ultra Engine
+        frameCount < 300 -> 2 // Universal Converter
+        frameCount < 400 -> 3 // Content Editor & Whiteout
+        frameCount < 500 -> 4 // Signatures & Custom Watermark
         else -> 5             // Ready & Unlock High FPS
     }
 
@@ -217,7 +217,7 @@ fun BootupShowcaseScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // TOP BAR: 30 FPS LOCK TELEMETRY HUD
+            // TOP BAR: 60 FPS LOCK TELEMETRY HUD
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -244,7 +244,7 @@ fun BootupShowcaseScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "30 FPS [LOCKED]",
+                            text = "60 FPS [LOCKED]",
                             color = Color(0xFF38BDF8),
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
@@ -253,7 +253,7 @@ fun BootupShowcaseScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "• 33.3ms",
+                            text = "• 16.6ms",
                             color = AcrobatTextMuted,
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace

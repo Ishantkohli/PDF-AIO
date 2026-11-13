@@ -19,7 +19,218 @@ import org.json.JSONArray
 import java.io.File
 import java.io.FileOutputStream
 
+import android.provider.OpenableColumns
+import java.util.UUID
+
+data class PdfMergeItem(
+    val id: String = UUID.randomUUID().toString(),
+    val uri: Uri,
+    val title: String,
+    val pageCount: Int,
+    val fileSizeBytes: Long,
+    val isFromLibrary: Boolean = false
+)
+
 object PdfExportEngine {
+
+    /**
+     * Extracts readable file display name from Uri (SAF or File Provider)
+     */
+    fun getFileNameFromUri(context: Context, uri: Uri): String {
+        var result: String? = null
+        if (uri.scheme == "content") {
+            try {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (index != -1) {
+                            result = cursor.getString(index)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        if (result == null) {
+            result = uri.path
+            val cut = result?.lastIndexOf('/') ?: -1
+            if (cut != -1) {
+                result = result?.substring(cut + 1)
+            }
+        }
+        return (result ?: "Document_${System.currentTimeMillis()}.pdf").removeSuffix(".pdf").removeSuffix(".PDF") + ".pdf"
+    }
+
+    /**
+     * Inspects page count of a PDF file specified by Uri
+     */
+    fun getPdfPageCountFromUri(context: Context, uri: Uri): Int {
+        return try {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                PdfRenderer(pfd).use { renderer ->
+                    renderer.pageCount
+                }
+            } ?: 1
+        } catch (e: Exception) {
+            1
+        }
+    }
+
+    /**
+     * Determines byte length of PDF file specified by Uri
+     */
+    fun getFileSizeBytesFromUri(context: Context, uri: Uri): Long {
+        return try {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                pfd.statSize
+            } ?: 0L
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    suspend fun mergePdfs(
+        pdfFiles: List<File>,
+        outputFile: File
+    ): Boolean = withContext(Dispatchers.IO) {
+        val newDoc = PdfDocument()
+        var totalPages = 0
+
+        try {
+            for (file in pdfFiles) {
+                var pfd: ParcelFileDescriptor? = null
+                var renderer: PdfRenderer? = null
+                try {
+                    pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+                    renderer = PdfRenderer(pfd)
+                    for (i in 0 until renderer.pageCount) {
+                        val page = renderer.openPage(i)
+                        val w = page.width
+                        val h = page.height
+                        val bitmap = Bitmap.createBitmap(w * 2, h * 2, Bitmap.Config.ARGB_8888)
+                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+                        page.close()
+
+                        totalPages++
+                        val pageInfo = PdfDocument.PageInfo.Builder(w, h, totalPages).create()
+                        val newPage = newDoc.startPage(pageInfo)
+                        newPage.canvas.drawBitmap(bitmap, null, Rect(0, 0, w, h), null)
+                        bitmap.recycle()
+                        newDoc.finishPage(newPage)
+                    }
+                } finally {
+                    try { renderer?.close() } catch (ignored: Exception) {}
+                    try { pfd?.close() } catch (ignored: Exception) {}
+                }
+            }
+
+            FileOutputStream(outputFile).use { fos -> newDoc.writeTo(fos) }
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        } finally {
+            try { newDoc.close() } catch (ignored: Exception) {}
+        }
+    }
+
+    /**
+     * Advanced Multi-File PDF Merger supporting both internal app storage and SAF Uris.
+     * Combines multiple PDF files in sequence into a single unified output PDF document.
+     */
+    suspend fun mergePdfsFromUris(
+        context: Context,
+        pdfItems: List<PdfMergeItem>,
+        outputFile: File,
+        insertSeparators: Boolean = false,
+        onProgress: (Int, Int) -> Unit = { _, _ -> }
+    ): Boolean = withContext(Dispatchers.IO) {
+        val newDoc = PdfDocument()
+        var totalMergedPages = 0
+        val totalFiles = pdfItems.size
+
+        try {
+            pdfItems.forEachIndexed { index, item ->
+                var pfd: ParcelFileDescriptor? = null
+                var renderer: PdfRenderer? = null
+                try {
+                    pfd = context.contentResolver.openFileDescriptor(item.uri, "r")
+                    if (pfd != null) {
+                        renderer = PdfRenderer(pfd)
+                        val pageCount = renderer.pageCount
+
+                        for (i in 0 until pageCount) {
+                            val page = renderer.openPage(i)
+                            val w = page.width
+                            val h = page.height
+
+                            val scale = if (maxOf(w, h) > 2000) 1 else 2
+                            val bitmap = Bitmap.createBitmap(w * scale, h * scale, Bitmap.Config.ARGB_8888)
+                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+                            page.close()
+
+                            totalMergedPages++
+                            val pageInfo = PdfDocument.PageInfo.Builder(w, h, totalMergedPages).create()
+                            val newPage = newDoc.startPage(pageInfo)
+                            newPage.canvas.drawBitmap(bitmap, null, Rect(0, 0, w, h), null)
+                            bitmap.recycle()
+                            newDoc.finishPage(newPage)
+                        }
+
+                        if (insertSeparators && index < totalFiles - 1) {
+                            totalMergedPages++
+                            val sepWidth = 595
+                            val sepHeight = 842
+                            val sepInfo = PdfDocument.PageInfo.Builder(sepWidth, sepHeight, totalMergedPages).create()
+                            val sepPage = newDoc.startPage(sepInfo)
+                            val canvas = sepPage.canvas
+                            canvas.drawColor(Color.WHITE)
+
+                            val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                color = Color.rgb(226, 232, 240)
+                                style = Paint.Style.STROKE
+                                strokeWidth = 3f
+                            }
+                            canvas.drawRect(40f, 40f, sepWidth - 40f, sepHeight - 40f, borderPaint)
+
+                            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                color = Color.rgb(71, 85, 105)
+                                textSize = 18f
+                                isFakeBoldText = true
+                                textAlign = Paint.Align.CENTER
+                            }
+                            canvas.drawText("SECTION BREAK", sepWidth / 2f, sepHeight / 2f - 20f, textPaint)
+
+                            val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                color = Color.rgb(100, 116, 139)
+                                textSize = 13f
+                                textAlign = Paint.Align.CENTER
+                            }
+                            val nextName = pdfItems.getOrNull(index + 1)?.title ?: "Next Document"
+                            canvas.drawText("End of ${item.title} • Next: $nextName", sepWidth / 2f, sepHeight / 2f + 15f, subPaint)
+
+                            newDoc.finishPage(sepPage)
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    try { renderer?.close() } catch (ignored: Exception) {}
+                    try { pfd?.close() } catch (ignored: Exception) {}
+                }
+                onProgress(index + 1, totalFiles)
+            }
+
+            FileOutputStream(outputFile).use { fos -> newDoc.writeTo(fos) }
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        } finally {
+            try { newDoc.close() } catch (ignored: Exception) {}
+        }
+    }
 
     suspend fun exportAnnotatedPdf(
         sourceFile: File,
@@ -120,50 +331,7 @@ object PdfExportEngine {
         }
     }
 
-    suspend fun mergePdfs(
-        pdfFiles: List<File>,
-        outputFile: File
-    ): Boolean = withContext(Dispatchers.IO) {
-        val newDoc = PdfDocument()
-        var totalPages = 0
 
-        try {
-            for (file in pdfFiles) {
-                var pfd: ParcelFileDescriptor? = null
-                var renderer: PdfRenderer? = null
-                try {
-                    pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-                    renderer = PdfRenderer(pfd)
-                    for (i in 0 until renderer.pageCount) {
-                        val page = renderer.openPage(i)
-                        val w = page.width
-                        val h = page.height
-                        val bitmap = Bitmap.createBitmap(w * 2, h * 2, Bitmap.Config.ARGB_8888)
-                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
-                        page.close()
-
-                        totalPages++
-                        val pageInfo = PdfDocument.PageInfo.Builder(w, h, totalPages).create()
-                        val newPage = newDoc.startPage(pageInfo)
-                        newPage.canvas.drawBitmap(bitmap, null, Rect(0, 0, w, h), null)
-                        bitmap.recycle()
-                        newDoc.finishPage(newPage)
-                    }
-                } finally {
-                    try { renderer?.close() } catch (ignored: Exception) {}
-                    try { pfd?.close() } catch (ignored: Exception) {}
-                }
-            }
-
-            FileOutputStream(outputFile).use { fos -> newDoc.writeTo(fos) }
-            true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        } finally {
-            try { newDoc.close() } catch (ignored: Exception) {}
-        }
-    }
 
     suspend fun organizePages(
         sourceFile: File,

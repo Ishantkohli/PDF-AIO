@@ -197,7 +197,7 @@ fun RefreshRateDialog(
                     )
                 }
 
-                // Replay Bootup Showcase (30 FPS Lock)
+                // Replay Bootup Showcase (60 FPS Lock)
                 OutlinedButton(
                     onClick = {
                         onDismiss()
@@ -214,7 +214,7 @@ fun RefreshRateDialog(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Replay Bootup Showcase (30 FPS Lock)", color = Color(0xFF38BDF8), fontSize = 12.sp)
+                    Text("Replay Bootup Showcase (60 FPS Locked)", color = Color(0xFF38BDF8), fontSize = 12.sp)
                 }
             }
         },
@@ -240,14 +240,14 @@ fun RealTimeFpsHud(
 ) {
     val fps by FpsMonitor.fps.collectAsStateWithLifecycle()
     val refreshRate by DisplayRefreshRateManager.currentRefreshRate.collectAsStateWithLifecycle()
-    val is30FpsLocked by DisplayRefreshRateManager.isLock30FpsActive.collectAsStateWithLifecycle()
+    val is60FpsLocked by DisplayRefreshRateManager.isLock60FpsActive.collectAsStateWithLifecycle()
 
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = Color(0xFF080C14).copy(alpha = 0.92f),
         border = CardDefaults.outlinedCardBorder().copy(
             brush = androidx.compose.ui.graphics.SolidColor(
-                if (is30FpsLocked) Color(0xFFF59E0B) else Color(0xFF00E5FF)
+                Color(0xFF00E5FF)
             )
         ),
         shadowElevation = 8.dp,
@@ -261,12 +261,12 @@ fun RealTimeFpsHud(
                 modifier = Modifier
                     .size(7.dp)
                     .clip(CircleShape)
-                    .background(if (is30FpsLocked) Color(0xFFF59E0B) else Color(0xFF10B981))
+                    .background(Color(0xFF10B981))
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = if (is30FpsLocked) "30 FPS [LOCK]" else "$fps FPS • ${refreshRate}Hz",
-                color = if (is30FpsLocked) Color(0xFFFBBF24) else Color(0xFF38BDF8),
+                text = if (is60FpsLocked && refreshRate == 60) "60 FPS [LOCKED]" else "$fps FPS • ${refreshRate}Hz",
+                color = Color(0xFF38BDF8),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace

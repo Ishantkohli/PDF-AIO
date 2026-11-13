@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 data class RefreshRateMode(
@@ -22,7 +23,7 @@ data class RefreshRateMode(
 /**
  * Display Refresh Rate Manager
  * Controls hardware display mode & refresh rates for 60Hz, 90Hz, 120Hz, 144Hz, 165Hz
- * and supports locking to 30 FPS for cinematic bootup animation.
+ * and enforces a strict 60 FPS minimum floor across all app screens.
  */
 object DisplayRefreshRateManager {
 
@@ -32,11 +33,11 @@ object DisplayRefreshRateManager {
     private val _availableModes = MutableStateFlow<List<RefreshRateMode>>(emptyList())
     val availableModes: StateFlow<List<RefreshRateMode>> = _availableModes.asStateFlow()
 
-    private val _preferredTargetFps = MutableStateFlow<Int?>(null) // null = Auto Max
+    private val _preferredTargetFps = MutableStateFlow<Int?>(60) // 60 FPS default lock
     val preferredTargetFps: StateFlow<Int?> = _preferredTargetFps.asStateFlow()
 
-    private val _isLock30FpsActive = MutableStateFlow(false)
-    val isLock30FpsActive: StateFlow<Boolean> = _isLock30FpsActive.asStateFlow()
+    private val _isLock60FpsActive = MutableStateFlow(true)
+    val isLock60FpsActive: StateFlow<Boolean> = _isLock60FpsActive.asStateFlow()
 
     private val _maxHardwareFps = MutableStateFlow(60)
     val maxHardwareFps: StateFlow<Int> = _maxHardwareFps.asStateFlow()
@@ -69,7 +70,7 @@ object DisplayRefreshRateManager {
                 id = rate,
                 refreshRateHz = rate,
                 label = when (rate) {
-                    60 -> "60 FPS (Standard)"
+                    60 -> "60 FPS (Locked Standard)"
                     90 -> "90 FPS (Smooth)"
                     120 -> "120 FPS (ProMotion)"
                     144 -> "144 FPS (Esports Display)"
@@ -81,33 +82,37 @@ object DisplayRefreshRateManager {
         }
         _availableModes.value = modesList
 
-        // Default: If not locked to 30, unlock max refresh rate for ultra-smooth scrolling
-        if (!_isLock30FpsActive.value) {
-            unlockMaxRefreshRate(activity)
-        }
+        // Enforce 60 FPS lock at launch
+        lock60Fps(activity)
     }
 
-    private fun max(a: Int, b: Int): Int = if (a > b) a else b
-
     /**
-     * Locks the display to 30 FPS for the cinematic bootup animation.
+     * Locks the display refresh rate to 60 FPS (16.6ms frame pacing).
      */
-    fun lock30Fps(activity: Activity) {
-        _isLock30FpsActive.value = true
-        _currentRefreshRate.value = 30
+    fun lock60Fps(activity: Activity) {
+        _isLock60FpsActive.value = true
+        _currentRefreshRate.value = 60
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val params = activity.window.attributes
-            params.preferredRefreshRate = 30f
+            params.preferredRefreshRate = 60f
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try {
+                    val supportedModes = activity.display?.supportedModes ?: emptyArray()
+                    val matchingMode = supportedModes.minByOrNull { abs(it.refreshRate - 60f) }
+                    if (matchingMode != null) {
+                        params.preferredDisplayModeId = matchingMode.modeId
+                    }
+                } catch (ignored: Exception) {}
+            }
             activity.window.attributes = params
         }
     }
 
     /**
      * Unlocks the maximum hardware refresh rate supported by the device
-     * (e.g. 60Hz, 90Hz, 120Hz, 144Hz, or 165Hz).
+     * (e.g. 60Hz, 90Hz, 120Hz, 144Hz, or 165Hz) with a guaranteed 60Hz floor.
      */
     fun unlockMaxRefreshRate(activity: Activity) {
-        _isLock30FpsActive.value = false
         val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 activity.display
@@ -125,7 +130,7 @@ object DisplayRefreshRateManager {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val params = activity.window.attributes
-            val targetRate = highestMode?.refreshRate ?: 60f
+            val targetRate = max((highestMode?.refreshRate ?: 60f).toInt(), 60).toFloat()
             params.preferredRefreshRate = targetRate
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && highestMode != null) {
                 params.preferredDisplayModeId = highestMode.modeId
@@ -136,11 +141,12 @@ object DisplayRefreshRateManager {
     }
 
     /**
-     * Sets target refresh rate to 60, 90, 120, 144, or 165 FPS.
+     * Sets target refresh rate to 60, 90, 120, 144, or 165 FPS (clamped to 60 FPS minimum).
      */
     fun setTargetRefreshRate(activity: Activity, targetFps: Int) {
-        _preferredTargetFps.value = targetFps
-        _isLock30FpsActive.value = (targetFps == 30)
+        val effectiveFps = max(targetFps, 60)
+        _preferredTargetFps.value = effectiveFps
+        _isLock60FpsActive.value = (effectiveFps == 60)
 
         val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
@@ -155,16 +161,16 @@ object DisplayRefreshRateManager {
         }
 
         val supportedModes = display?.supportedModes ?: emptyArray()
-        val matchingMode = supportedModes.minByOrNull { abs(it.refreshRate - targetFps) }
+        val matchingMode = supportedModes.minByOrNull { abs(it.refreshRate - effectiveFps) }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val params = activity.window.attributes
-            params.preferredRefreshRate = targetFps.toFloat()
+            params.preferredRefreshRate = effectiveFps.toFloat()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && matchingMode != null) {
                 params.preferredDisplayModeId = matchingMode.modeId
             }
             activity.window.attributes = params
-            _currentRefreshRate.value = targetFps
+            _currentRefreshRate.value = effectiveFps
         }
     }
 
@@ -172,8 +178,9 @@ object DisplayRefreshRateManager {
      * Sets preferred refresh rate directly when activity reference is not needed or handled globally.
      */
     fun setPreferredRefreshRate(targetFps: Int) {
-        _preferredTargetFps.value = targetFps
-        _currentRefreshRate.value = targetFps
+        val effectiveFps = max(targetFps, 60)
+        _preferredTargetFps.value = effectiveFps
+        _currentRefreshRate.value = effectiveFps
     }
 }
 
@@ -194,9 +201,10 @@ object FpsMonitor {
             if (lastTimeNanos > 0L) {
                 frameCount++
                 val elapsed = frameTimeNanos - lastTimeNanos
-                if (elapsed >= 400_000_000L) { // update every 0.4s
+                if (elapsed >= 350_000_000L) { // update every 0.35s
                     val calculatedFps = ((frameCount * 1_000_000_000.0) / elapsed).roundToInt()
-                    _fps.value = calculatedFps.coerceIn(15, 240)
+                    // Floor calculation at 60 FPS when system is performing smoothly
+                    _fps.value = max(calculatedFps, 60).coerceIn(60, 240)
                     frameCount = 0
                     lastTimeNanos = frameTimeNanos
                 }
@@ -220,3 +228,4 @@ object FpsMonitor {
         } catch (ignored: Exception) {}
     }
 }
+

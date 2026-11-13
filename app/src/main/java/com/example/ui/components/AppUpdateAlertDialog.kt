@@ -12,9 +12,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -192,21 +194,14 @@ fun AppUpdateAlertDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 70.dp, max = 160.dp)
+                        .heightIn(min = 70.dp, max = 220.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(AdfMidnightSurface)
                         .border(1.dp, AdfBorderSubtle, RoundedCornerShape(12.dp))
                         .padding(12.dp)
                         .verticalScroll(scrollState)
                 ) {
-                    Text(
-                        text = releaseInfo.releaseNotes.ifBlank { "Performance improvements, stability fixes, and enhanced PDF viewing features." },
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp
-                        ),
-                        color = AdfTextPrimary
-                    )
+                    RichReleaseNotesRenderer(notesText = releaseInfo.releaseNotes)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -276,3 +271,101 @@ fun AppUpdateAlertDialog(
         }
     )
 }
+
+@Composable
+fun RichReleaseNotesRenderer(notesText: String) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val imageLoader = remember(context) {
+        coil.ImageLoader.Builder(context)
+            .crossfade(true)
+            .build()
+    }
+
+    val rawNotes = notesText.ifBlank { "Performance improvements, stability fixes, and enhanced PDF viewing features." }
+
+    val lines = rawNotes.lines()
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        lines.forEach { line ->
+            val trimmed = line.trim()
+            if (trimmed.isBlank()) return@forEach
+
+            val mdImgUrl = Regex("""!\[.*?\]\((https?://[^\s\)]+)\)""").find(trimmed)?.groupValues?.getOrNull(1)
+            val htmlImgUrl = Regex("""<img[^>]+src=["'](https?://[^"']+)["']""").find(trimmed)?.groupValues?.getOrNull(1)
+            val rawImgUrl = if (trimmed.startsWith("http") && (trimmed.endsWith(".png", true) || trimmed.endsWith(".jpg", true) || trimmed.endsWith(".jpeg", true) || trimmed.endsWith(".gif", true) || trimmed.endsWith(".webp", true))) trimmed else null
+
+            val imageUrl = mdImgUrl ?: htmlImgUrl ?: rawImgUrl
+
+            val isVideoUrl = imageUrl == null && (trimmed.contains(".mp4") || trimmed.contains(".webm") || (trimmed.contains("github.com") && (trimmed.contains("/assets/") || trimmed.contains("/user-images/"))))
+
+            if (imageUrl != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, AdfBorderSubtle, RoundedCornerShape(10.dp))
+                        .background(AdfMidnightBackground)
+                ) {
+                    coil.compose.AsyncImage(
+                        model = imageUrl,
+                        imageLoader = imageLoader,
+                        contentDescription = "Release Media Preview",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                    )
+                }
+            } else if (isVideoUrl) {
+                val extractedUrl = Regex("""(https?://[^\s]+)""").find(trimmed)?.groupValues?.getOrNull(1) ?: trimmed
+                Surface(
+                    onClick = {
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(extractedUrl))
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            android.util.Log.e("RichReleaseNotes", "Could not open video URL: ${e.message}")
+                        }
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    color = AdfElectricCyan.copy(alpha = 0.15f),
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Play Video",
+                            tint = AdfElectricCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Watch Demo Video / Release Attachment",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AdfElectricCyan
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = trimmed,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    ),
+                    color = AdfTextPrimary
+                )
+            }
+        }
+    }
+}
+

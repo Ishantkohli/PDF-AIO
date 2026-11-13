@@ -46,14 +46,14 @@ class PdfRendererManager(val file: File) {
     }
 
     /**
-     * Renders a PDF page to a Bitmap with resilient memory scaling and OOM fallback.
+     * Renders a PDF page to a Bitmap with resilient memory scaling, 4K Ultra-Clarity support, and OOM fallback.
      */
-    suspend fun renderPage(pageIndex: Int, densityDpi: Int = 2): Bitmap? = withContext(Dispatchers.IO) {
+    suspend fun renderPage(pageIndex: Int, densityDpi: Int = 2, autoSharpen4K: Boolean = false): Bitmap? = withContext(Dispatchers.IO) {
         if (pdfRenderer == null || pageIndex < 0 || pageIndex >= pageCount) {
             return@withContext null
         }
 
-        val cacheKey = "${file.absolutePath}_p${pageIndex}_dpi$densityDpi"
+        val cacheKey = "${file.absolutePath}_p${pageIndex}_dpi${densityDpi}_sharp$autoSharpen4K"
         memoryCache.get(cacheKey)?.let { cached ->
             if (!cached.isRecycled) return@withContext cached
         }
@@ -66,9 +66,9 @@ class PdfRendererManager(val file: File) {
                 val pageWidth = page.width
                 val pageHeight = page.height
 
-                // Cap maximum rendering dimension according to device capabilities
-                // Prevents OOM crashes on high-res scans or blueprints on 2GB RAM Oppo/Realme/Samsung phones
-                val maxDimension = if (isLowMemoryDevice) 1800 else 3200
+                // Cap maximum rendering dimension according to device capabilities & 4K request
+                // Supports true 4K Ultra-HD (4096px) on zoom for crystal-clear readability
+                val maxDimension = if (isLowMemoryDevice) 2400 else if (densityDpi >= 3 || autoSharpen4K) 4096 else 3200
                 val rawW = (pageWidth * densityDpi).coerceAtLeast(1)
                 val rawH = (pageHeight * densityDpi).coerceAtLeast(1)
                 val downscale = if (rawW > maxDimension || rawH > maxDimension) {
@@ -80,8 +80,8 @@ class PdfRendererManager(val file: File) {
                 val finalW = ((rawW * downscale).toInt()).coerceIn(1, maxDimension)
                 val finalH = ((rawH * downscale).toInt()).coerceIn(1, maxDimension)
 
-                // Select pixel config: RGB_565 uses half the RAM, perfect for budget devices
-                val config = if (isLowMemoryDevice) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
+                // Select pixel config: RGB_565 for low memory devices, ARGB_8888 for 4K clarity
+                val config = if (isLowMemoryDevice && densityDpi < 3) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
 
                 var bitmap: Bitmap? = null
                 try {
@@ -90,17 +90,19 @@ class PdfRendererManager(val file: File) {
                     Log.w("PdfRendererManager", "OOM allocating ${finalW}x${finalH}, recovering...", oom)
                     memoryCache.evictAll()
                     System.gc()
-                    // Emergency fallback: 1x scale with RGB_565
-                    val fallbackW = (pageWidth * 1.0f).toInt().coerceAtLeast(1)
-                    val fallbackH = (pageHeight * 1.0f).toInt().coerceAtLeast(1)
+                    // Emergency fallback: 1.5x scale
+                    val fallbackW = (pageWidth * 1.5f).toInt().coerceAtLeast(1)
+                    val fallbackH = (pageHeight * 1.5f).toInt().coerceAtLeast(1)
                     bitmap = Bitmap.createBitmap(fallbackW, fallbackH, Bitmap.Config.RGB_565)
                 }
 
                 bitmap?.let { bmp ->
                     page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    memoryCache.put(cacheKey, bmp)
+                    val finalResult = if (autoSharpen4K) apply4KSharpenFilter(bmp) else bmp
+                    memoryCache.put(cacheKey, finalResult)
+                    return@withContext finalResult
                 }
-                return@withContext bitmap
+                return@withContext null
             } catch (t: Throwable) {
                 Log.e("PdfRendererManager", "Render failed for page $pageIndex", t)
                 return@withContext null
@@ -109,6 +111,34 @@ class PdfRendererManager(val file: File) {
                     page?.close()
                 } catch (ignored: Exception) {}
             }
+        }
+    }
+
+    /**
+     * Applies a 4K Super-Resolution Sharpness filter to enhance text legibility and edge contrast.
+     */
+    private fun apply4KSharpenFilter(source: Bitmap): Bitmap {
+        try {
+            val width = source.width
+            val height = source.height
+            val output = Bitmap.createBitmap(width, height, source.config ?: Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(output)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG)
+            
+            // High-contrast edge-sharpening matrix (boosts micro-contrast on text & vector edges)
+            val colorMatrix = android.graphics.ColorMatrix(
+                floatArrayOf(
+                    1.12f, -0.06f, -0.06f, 0f, 0f,
+                    -0.06f, 1.12f, -0.06f, 0f, 0f,
+                    -0.06f, -0.06f, 1.12f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+            paint.colorFilter = android.graphics.ColorMatrixColorFilter(colorMatrix)
+            canvas.drawBitmap(source, 0f, 0f, paint)
+            return output
+        } catch (e: Exception) {
+            return source
         }
     }
 

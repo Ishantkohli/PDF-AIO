@@ -48,11 +48,13 @@ fun CoreSuiteMenuSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val currentRefreshRate by DisplayRefreshRateManager.currentRefreshRate.collectAsState()
     var isConversionExpanded by remember { mutableStateOf(false) }
+    val activeThemeStyle by ThemeManager.currentTheme.collectAsState()
+    val isLiquidTheme = activeThemeStyle == AppThemeStyle.LIQUID_GLASS || activeThemeStyle == AppThemeStyle.FROSTED_CRYSTAL
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = AdfMidnightBackground,
+        containerColor = if (isLiquidTheme) GlassSurfaceDark else AdfMidnightBackground,
         scrimColor = Color.Black.copy(alpha = 0.72f),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         dragHandle = {

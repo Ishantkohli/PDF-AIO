@@ -66,6 +66,16 @@ fun PdfDiffScreen(
     val scrollStateA = rememberScrollState()
     val scrollStateB = rememberScrollState()
 
+    // Lock 60 FPS refresh rate for document comparison tool
+    LaunchedEffect(Unit) {
+        val activity = context as? android.app.Activity
+        if (activity != null) {
+            com.example.data.fps.DisplayRefreshRateManager.setTargetRefreshRate(activity, 60)
+        } else {
+            com.example.data.fps.DisplayRefreshRateManager.setPreferredRefreshRate(60)
+        }
+    }
+
     // Synchronize scrolling between left and right panels
     LaunchedEffect(scrollStateA.value) {
         if (scrollStateB.value != scrollStateA.value) {

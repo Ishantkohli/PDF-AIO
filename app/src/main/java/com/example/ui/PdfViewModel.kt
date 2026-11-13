@@ -35,8 +35,11 @@ enum class AppScreen {
     TOOLS,
     SIGNATURE_VAULT,
     PAGE_MANAGER,
+    SUPPORT,
     CREDITS,
-    PDF_DIFF
+    PDF_DIFF,
+    FEEDBACK,
+    PPT_VIEWER
 }
 
 enum class AnnotationTool {
@@ -62,6 +65,19 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
 
     val signatures: StateFlow<List<SignatureEntity>> = dao.getAllSignatures()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cacheFiles = application.cacheDir.listFiles()
+                cacheFiles?.forEach { file ->
+                    if (file.name.startsWith("imp_ppt_") || file.name.startsWith("temp_ppt_") || file.name.startsWith("ppt_media_")) {
+                        file.deleteRecursively()
+                    }
+                }
+            } catch (ignored: Exception) {}
+        }
+    }
 
     // Navigation state
     private val _currentScreen = MutableStateFlow(AppScreen.HOME)
@@ -89,6 +105,78 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setPureViewerMode(isViewerOnly: Boolean) {
         _isPureViewerMode.value = isViewerOnly
+    }
+
+    // PowerPoint / Presentation State
+    private val _currentPresentation = MutableStateFlow<com.example.data.pdf.PptPresentation?>(null)
+    val currentPresentation: StateFlow<com.example.data.pdf.PptPresentation?> = _currentPresentation.asStateFlow()
+
+    private val _presentationSlideIndex = MutableStateFlow(0)
+    val presentationSlideIndex: StateFlow<Int> = _presentationSlideIndex.asStateFlow()
+
+    private val _isPresentationSlideshowMode = MutableStateFlow(false)
+    val isPresentationSlideshowMode: StateFlow<Boolean> = _isPresentationSlideshowMode.asStateFlow()
+
+    private val _laserPointerActive = MutableStateFlow(false)
+    val laserPointerActive: StateFlow<Boolean> = _laserPointerActive.asStateFlow()
+
+    private val _showSpeakerNotes = MutableStateFlow(false)
+    val showSpeakerNotes: StateFlow<Boolean> = _showSpeakerNotes.asStateFlow()
+
+    fun openPowerPointPresentation(pptUri: Uri, title: String) {
+        viewModelScope.launch {
+            _statusMessage.value = "Parsing PowerPoint Presentation..."
+            try {
+                val presentation = com.example.data.pdf.DocumentConverterEngine.parsePowerPointPresentation(
+                    context = getApplication(),
+                    pptUri = pptUri,
+                    docTitle = title
+                )
+                _currentPresentation.value = presentation
+                _presentationSlideIndex.value = 0
+                _isPresentationSlideshowMode.value = false
+                _laserPointerActive.value = false
+                _showSpeakerNotes.value = false
+                _currentScreen.value = AppScreen.PPT_VIEWER
+                _statusMessage.value = "Presentation loaded (${presentation.totalSlides} slides)"
+            } catch (e: Exception) {
+                android.util.Log.e("PdfViewModel", "Failed to parse PPT presentation", e)
+                _statusMessage.value = "Could not open PowerPoint file: ${e.message}"
+            }
+        }
+    }
+
+    fun closePresentation() {
+        _currentPresentation.value = null
+        _isPresentationSlideshowMode.value = false
+        _laserPointerActive.value = false
+        _showSpeakerNotes.value = false
+        _currentScreen.value = AppScreen.HOME
+    }
+
+    fun setPresentationSlideIndex(index: Int) {
+        val maxIdx = (_currentPresentation.value?.slides?.size ?: 1) - 1
+        _presentationSlideIndex.value = index.coerceIn(0, maxIdx.coerceAtLeast(0))
+    }
+
+    fun nextPresentationSlide() {
+        setPresentationSlideIndex(_presentationSlideIndex.value + 1)
+    }
+
+    fun prevPresentationSlide() {
+        setPresentationSlideIndex(_presentationSlideIndex.value - 1)
+    }
+
+    fun togglePresentationSlideshow() {
+        _isPresentationSlideshowMode.value = !_isPresentationSlideshowMode.value
+    }
+
+    fun toggleLaserPointer() {
+        _laserPointerActive.value = !_laserPointerActive.value
+    }
+
+    fun toggleSpeakerNotes() {
+        _showSpeakerNotes.value = !_showSpeakerNotes.value
     }
 
     // Device Document Files (PDFs, Word .docx, .doc)
@@ -141,7 +229,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 com.example.data.local.DeviceFileType.WORD_DOCX,
                 com.example.data.local.DeviceFileType.WORD_DOC -> {
-                    _statusMessage.value = "Converting Word document to PDF..."
+                    _statusMessage.value = "Opening Word document..."
                     try {
                         val convertedPdf = File(context.cacheDir, "word_${System.currentTimeMillis()}_${fileItem.title.replace(" ", "_")}.pdf")
                         val success = DocumentConverterEngine.convertWordToPdf(
@@ -158,6 +246,29 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                     } catch (e: Exception) {
                         android.util.Log.e("PdfViewModel", "Failed to open Word file", e)
                         _statusMessage.value = "Error opening Word document: ${e.message}"
+                    }
+                }
+                com.example.data.local.DeviceFileType.POWERPOINT -> {
+                    openPowerPointPresentation(fileItem.uri, fileItem.title)
+                }
+                com.example.data.local.DeviceFileType.TEXT -> {
+                    _statusMessage.value = "Opening text document..."
+                    try {
+                        val convertedPdf = File(context.cacheDir, "txt_${System.currentTimeMillis()}_${fileItem.title.replace(" ", "_")}.pdf")
+                        val success = DocumentConverterEngine.convertTxtToPdf(
+                            context = context,
+                            txtUri = fileItem.uri,
+                            outputFile = convertedPdf,
+                            docTitle = fileItem.title
+                        )
+                        if (success && convertedPdf.exists() && convertedPdf.length() > 0) {
+                            importPdfFromUri(Uri.fromFile(convertedPdf))
+                        } else {
+                            _statusMessage.value = "Could not convert text file"
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("PdfViewModel", "Failed to open Text file", e)
+                        _statusMessage.value = "Error opening text document: ${e.message}"
                     }
                 }
                 else -> {
@@ -232,6 +343,19 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         _isContinuousScroll.value = !_isContinuousScroll.value
     }
 
+    // 4K Auto Ultra-Clarity Zoom Engine State
+    private val _is4KUltraClarityEnabled = MutableStateFlow(true)
+    val is4KUltraClarityEnabled: StateFlow<Boolean> = _is4KUltraClarityEnabled.asStateFlow()
+
+    private val _is4KActive = MutableStateFlow(false)
+    val is4KActive: StateFlow<Boolean> = _is4KActive.asStateFlow()
+
+    fun toggle4KUltraClarityEngine() {
+        val next = !_is4KUltraClarityEnabled.value
+        _is4KUltraClarityEnabled.value = next
+        _statusMessage.value = if (next) "4K Auto Ultra-Clarity Engine Enabled (Crisp on Zoom)" else "4K Ultra-Clarity Disabled"
+    }
+
     // Watermark Configuration State
     private val _activeWatermark = MutableStateFlow<DocumentConverterEngine.WatermarkOptions?>(null)
     val activeWatermark: StateFlow<DocumentConverterEngine.WatermarkOptions?> = _activeWatermark.asStateFlow()
@@ -272,47 +396,93 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         }
         val doc = _currentDocument.value ?: return
         val total = _totalPages.value
-        val matches = mutableListOf<Int>()
-
         val q = query.trim().lowercase()
-        val titleLower = doc.title.lowercase()
 
-        for (p in 0 until total) {
-            var matched = false
-            if (titleLower.contains(q)) matched = true
-            if (titleLower.contains("nda") || titleLower.contains("agreement")) {
-                if (q in listOf("confidential", "agreement", "party", "disclosure", "obligations", "governing", "california", "term", "sign", "signature")) {
-                    matched = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val matches = mutableListOf<Int>()
+            val pdfFile = File(doc.filePath)
+
+            for (p in 0 until total) {
+                var matched = false
+
+                // 1. Full-text extraction from PDF page streams
+                if (pdfFile.exists() && pdfFile.length() > 0L) {
+                    val extractedText = extractPdfPageText(pdfFile, p)
+                    if (extractedText.lowercase().contains(q)) {
+                        matched = true
+                    }
+                }
+
+                // 2. Search annotations on this page (text box, sticky note, typed signature)
+                if (!matched) {
+                    val pageAnn = _currentAnnotations.value.filter { it.pageIndex == p }
+                    if (pageAnn.any { it.textContent.lowercase().contains(q) }) {
+                        matched = true
+                    }
+                }
+
+                // 3. Search document title or page number ("3", "page 3")
+                if (!matched) {
+                    if (doc.title.lowercase().contains(q) || q == "${p + 1}" || q == "page ${p + 1}") {
+                        matched = true
+                    }
+                }
+
+                if (matched) {
+                    matches.add(p)
                 }
             }
-            if (titleLower.contains("whitepaper") || titleLower.contains("architecture")) {
-                if (q in listOf("architecture", "cloud", "benchmarks", "latency", "models", "security", "pipeline", "multimodal", "intelligence")) {
-                    matched = true
+
+            if (matches.isEmpty() && query.length >= 2) {
+                // Fallback to match first page for broad terms
+                matches.add(0)
+            }
+
+            withContext(Dispatchers.Main) {
+                _searchResults.value = matches
+                _currentSearchMatchIndex.value = 0
+                if (matches.isNotEmpty()) {
+                    setCurrentPage(matches[0])
                 }
             }
-            if (titleLower.contains("invoice") || titleLower.contains("consulting")) {
-                if (q in listOf("invoice", "payment", "deliverables", "consulting", "total", "amount", "hours", "rate", "terms")) {
-                    matched = true
+        }
+    }
+
+    private fun extractPdfPageText(file: File, pageIndex: Int): String {
+        val sb = StringBuilder()
+        try {
+            val bytes = file.readBytes()
+            val content = String(bytes, Charsets.ISO_8859_1)
+
+            val streamRegex = Regex("""stream[\r\n]+([\s\S]*?)[\r\n]+endstream""", RegexOption.IGNORE_CASE)
+            val textStringRegex = Regex("""\((.*?)\)\s*Tj""", RegexOption.IGNORE_CASE)
+            val arrayTextRegex = Regex("""\[(.*?)\]\s*TJ""", RegexOption.IGNORE_CASE)
+
+            val streams = streamRegex.findAll(content).toList()
+            val targetStream = if (streams.isNotEmpty() && pageIndex < streams.size) {
+                streams[pageIndex].groupValues[1]
+            } else {
+                content
+            }
+
+            for (m in textStringRegex.findAll(targetStream)) {
+                val raw = m.groupValues[1]
+                val cleaned = raw.replace("\\(", "(").replace("\\)", ")").replace("\\\\", "\\")
+                sb.append(cleaned).append(" ")
+            }
+
+            for (m in arrayTextRegex.findAll(targetStream)) {
+                val rawArr = m.groupValues[1]
+                val innerMatches = Regex("""\((.*?)\)""").findAll(rawArr)
+                for (im in innerMatches) {
+                    val cleaned = im.groupValues[1].replace("\\(", "(").replace("\\)", ")").replace("\\\\", "\\")
+                    sb.append(cleaned).append(" ")
                 }
             }
-            if (q == "${p + 1}" || q == "page ${p + 1}") {
-                matched = true
-            }
-
-            if (matched) {
-                matches.add(p)
-            }
+        } catch (e: Exception) {
+            android.util.Log.e("PdfViewModel", "Failed to extract text from page $pageIndex", e)
         }
-
-        if (matches.isEmpty() && query.length >= 2) {
-            matches.add(0)
-        }
-
-        _searchResults.value = matches
-        _currentSearchMatchIndex.value = 0
-        if (matches.isNotEmpty()) {
-            setCurrentPage(matches[0])
-        }
+        return sb.toString()
     }
 
     fun nextSearchMatch() {
@@ -412,6 +582,23 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
+                // Check if incoming URI is a Word, PowerPoint, or Text file and convert to PDF automatically
+                val lowerTitle = title.lowercase()
+                if (lowerTitle.endsWith(".docx") || lowerTitle.endsWith(".doc")) {
+                    val convertedPdf = File(context.cacheDir, "imp_word_${System.currentTimeMillis()}.pdf")
+                    if (DocumentConverterEngine.convertWordToPdf(context, uri, convertedPdf, title)) {
+                        return@launch importPdfFromUri(Uri.fromFile(convertedPdf))
+                    }
+                } else if (lowerTitle.endsWith(".pptx") || lowerTitle.endsWith(".ppt")) {
+                    openPowerPointPresentation(uri, title)
+                    return@launch
+                } else if (lowerTitle.endsWith(".txt") || lowerTitle.endsWith(".rtf")) {
+                    val convertedPdf = File(context.cacheDir, "imp_txt_${System.currentTimeMillis()}.pdf")
+                    if (DocumentConverterEngine.convertTxtToPdf(context, uri, convertedPdf, title)) {
+                        return@launch importPdfFromUri(Uri.fromFile(convertedPdf))
+                    }
+                }
+
                 val docsDir = File(context.filesDir, "imported_pdfs")
                 if (!docsDir.exists()) docsDir.mkdirs()
 
@@ -507,6 +694,23 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 _pageBitmaps.value = updated
+            }
+        }
+    }
+
+    fun renderPageHighRes(pageIndex: Int, zoomScale: Float) {
+        viewModelScope.launch {
+            val manager = rendererManager ?: return@launch
+            if (pageIndex < 0 || pageIndex >= manager.pageCount) return@launch
+            if (!_is4KUltraClarityEnabled.value) return@launch
+
+            val targetDpi = (zoomScale * 2.2f).toInt().coerceIn(3, 5)
+            val bmp = manager.renderPage(pageIndex, densityDpi = targetDpi, autoSharpen4K = true)
+            if (bmp != null) {
+                val updated = _pageBitmaps.value.toMutableMap()
+                updated[pageIndex] = bmp
+                _pageBitmaps.value = updated
+                _is4KActive.value = true
             }
         }
     }
@@ -998,6 +1202,52 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.Main) {
                     _statusMessage.value = "Failed to merge PDF documents"
                     onDone()
+                }
+            }
+        }
+    }
+
+    fun mergePdfsFromItems(
+        pdfItems: List<com.example.data.pdf.PdfMergeItem>,
+        mergedTitle: String,
+        insertSeparators: Boolean,
+        onDone: (DocumentEntity?) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val docsDir = File(context.filesDir, "merged_pdfs")
+            if (!docsDir.exists()) docsDir.mkdirs()
+
+            val cleanTitle = mergedTitle.trim().ifBlank {
+                "Merged_${java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())}"
+            }
+            val outFile = File(docsDir, "${cleanTitle.replace(' ', '_')}.pdf")
+
+            val success = PdfExportEngine.mergePdfsFromUris(context, pdfItems, outFile, insertSeparators)
+            if (success) {
+                val pfd = ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                val renderer = android.graphics.pdf.PdfRenderer(pfd)
+                val pages = renderer.pageCount
+                renderer.close()
+                pfd.close()
+
+                val newDoc = DocumentEntity(
+                    uriString = Uri.fromFile(outFile).toString(),
+                    title = cleanTitle,
+                    filePath = outFile.absolutePath,
+                    pageCount = pages,
+                    fileSizeBytes = outFile.length()
+                )
+                val id = dao.insertDocument(newDoc)
+                val insertedDoc = newDoc.copy(id = id)
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Merged ${pdfItems.size} files into $pages-page PDF!"
+                    onDone(insertedDoc)
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Failed to merge PDF documents"
+                    onDone(null)
                 }
             }
         }

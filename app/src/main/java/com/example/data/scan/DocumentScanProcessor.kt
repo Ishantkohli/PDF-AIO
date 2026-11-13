@@ -13,21 +13,24 @@ import java.util.*
 import kotlin.math.min
 
 /**
- * Filter modes inspired by Adobe Scan
+ * Filter modes inspired by Adobe Scan & CamScanner
  */
 enum class ScanFilter(val label: String, val description: String) {
-    MAGIC_COLOR("Magic Color", "Whitens paper & sharpens text"),
+    WHITE_GREY("White & Grey", "Whitens paper background & sharpens grey text/lines"),
+    MAGIC_COLOR("Magic Color", "Whitens paper & sharpens text while preserving colors"),
     CLEAN_TEXT("Clean B&W", "High-contrast photocopier black & white"),
     GRAYSCALE("Grayscale", "Smooth monochrome document"),
-    ORIGINAL("Original", "Natural camera capture"),
-    WARM_PAPER("Warm Paper", "Eye-comfort sepia tint")
+    HIGH_CONTRAST("High Contrast", "Removes shadows & glare with maximum contrast"),
+    WARM_PAPER("Warm Paper", "Eye-comfort sepia tint"),
+    ORIGINAL("Original", "Natural camera capture")
 }
 
 data class ScannedPage(
     val id: String = UUID.randomUUID().toString(),
     val sourceUri: Uri,
-    var rotationDegrees: Int = 0,
-    var filter: ScanFilter = ScanFilter.MAGIC_COLOR
+    val rotationDegrees: Int = 0,
+    val filter: ScanFilter = ScanFilter.WHITE_GREY,
+    val filterIntensity: Float = 1.0f
 )
 
 /**
@@ -67,15 +70,19 @@ object DocumentScanProcessor {
     }
 
     /**
-     * Applies Adobe Scan-style document enhancement filters and rotation to a Bitmap.
+     * Applies Adobe Scan-style document enhancement filters, rotation, and intensity curve to a Bitmap.
      */
-    fun processBitmap(source: Bitmap, filter: ScanFilter, rotationDegrees: Int): Bitmap {
+    fun processBitmap(source: Bitmap, filter: ScanFilter, rotationDegrees: Int, filterIntensity: Float = 1.0f): Bitmap {
         var bmp = source
 
         // 1. Rotation if needed
         if (rotationDegrees % 360 != 0) {
             val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
             bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
+        }
+
+        if (filter == ScanFilter.ORIGINAL) {
+            return bmp
         }
 
         // 2. Filter application
@@ -85,8 +92,34 @@ object DocumentScanProcessor {
         val canvas = Canvas(output)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
+        val intensity = filterIntensity.coerceIn(0.2f, 2.5f)
+
         when (filter) {
             ScanFilter.ORIGINAL -> {
+                canvas.drawBitmap(bmp, 0f, 0f, paint)
+            }
+
+            ScanFilter.WHITE_GREY -> {
+                // White & Grey Filter:
+                // Whiten paper backgrounds (removing ambient shadows & yellow tints) while preserving crisp grey text, lines & stamps.
+                val contrast = 1.30f * intensity
+                val brightness = 28f * intensity
+                
+                // Color matrix combining subtle desaturation (0.25f) and paper whitening offset
+                val colorMatrix = ColorMatrix().apply {
+                    setSaturation(0.25f)
+                }
+                
+                val whiteningMatrix = ColorMatrix(
+                    floatArrayOf(
+                        contrast, 0f, 0f, 0f, brightness,
+                        0f, contrast, 0f, 0f, brightness,
+                        0f, 0f, contrast, 0f, brightness,
+                        0f, 0f, 0f, 1f, 0f
+                    )
+                )
+                whiteningMatrix.preConcat(colorMatrix)
+                paint.colorFilter = ColorMatrixColorFilter(whiteningMatrix)
                 canvas.drawBitmap(bmp, 0f, 0f, paint)
             }
 
@@ -94,8 +127,8 @@ object DocumentScanProcessor {
                 // Adobe Scan "Magic Color" formula:
                 // Boosts contrast to whiten paper backgrounds, slightly increases brightness,
                 // and enhances contrast for ink/lettering while preserving colored stamps and logos.
-                val contrast = 1.35f
-                val brightness = 20f
+                val contrast = 1.38f * intensity
+                val brightness = 22f * intensity
                 val colorMatrix = ColorMatrix(
                     floatArrayOf(
                         contrast, 0f, 0f, 0f, brightness,
@@ -113,8 +146,8 @@ object DocumentScanProcessor {
                 // Heavy grayscale conversion with steep high-contrast threshold curve
                 // to turn paper backgrounds pure white (#FFFFFF) and ink crisp black (#000000).
                 val grayMatrix = ColorMatrix().apply { setSaturation(0f) }
-                val contrast = 2.2f
-                val brightness = 35f
+                val contrast = 2.3f * intensity
+                val brightness = 38f * intensity
                 val bAndWMatrix = ColorMatrix(
                     floatArrayOf(
                         contrast, 0f, 0f, 0f, brightness,
@@ -131,8 +164,8 @@ object DocumentScanProcessor {
             ScanFilter.GRAYSCALE -> {
                 // Smooth monochrome grayscale
                 val grayMatrix = ColorMatrix().apply { setSaturation(0f) }
-                val contrast = 1.15f
-                val brightness = 10f
+                val contrast = 1.18f * intensity
+                val brightness = 12f * intensity
                 val adjusted = ColorMatrix(
                     floatArrayOf(
                         contrast, 0f, 0f, 0f, brightness,
@@ -146,13 +179,29 @@ object DocumentScanProcessor {
                 canvas.drawBitmap(bmp, 0f, 0f, paint)
             }
 
+            ScanFilter.HIGH_CONTRAST -> {
+                // High contrast shadow removal
+                val contrast = 1.65f * intensity
+                val brightness = 32f * intensity
+                val matrix = ColorMatrix(
+                    floatArrayOf(
+                        contrast, 0f, 0f, 0f, brightness,
+                        0f, contrast, 0f, 0f, brightness,
+                        0f, 0f, contrast, 0f, brightness,
+                        0f, 0f, 0f, 1f, 0f
+                    )
+                )
+                paint.colorFilter = ColorMatrixColorFilter(matrix)
+                canvas.drawBitmap(bmp, 0f, 0f, paint)
+            }
+
             ScanFilter.WARM_PAPER -> {
                 // Warm reading book paper tint
                 val warmMatrix = ColorMatrix(
                     floatArrayOf(
-                        1.2f, 0f, 0f, 0f, 15f,
-                        0f, 1.15f, 0f, 0f, 10f,
-                        0f, 0f, 0.95f, 0f, -5f,
+                        1.22f * intensity, 0f, 0f, 0f, 18f,
+                        0f, 1.16f * intensity, 0f, 0f, 12f,
+                        0f, 0f, 0.94f * intensity, 0f, -5f,
                         0f, 0f, 0f, 1f, 0f
                     )
                 )
@@ -165,13 +214,27 @@ object DocumentScanProcessor {
     }
 
     /**
+     * Generates a fast scaled thumbnail for live filter previews in the filter selection bar.
+     */
+    fun createFilterPreviewThumbnail(source: Bitmap, filter: ScanFilter, targetSize: Int = 120): Bitmap {
+        val aspect = source.width.toFloat() / source.height.toFloat()
+        val tw = if (aspect >= 1f) targetSize else (targetSize * aspect).toInt().coerceAtLeast(40)
+        val th = if (aspect >= 1f) (targetSize / aspect).toInt().coerceAtLeast(40) else targetSize
+
+        val scaled = Bitmap.createScaledBitmap(source, tw, th, true)
+        return processBitmap(scaled, filter, 0, 1.0f)
+    }
+
+    /**
      * Compiles a collection of ScannedPages into a finalized Multi-Page PDF Document.
+     * Optionally embeds transparent, searchable OCR text operators for dual-layer PDF/A standard.
      */
     suspend fun generatePdf(
         context: Context,
         pages: List<ScannedPage>,
         title: String,
-        pageSizeA4: Boolean = true
+        pageSizeA4: Boolean = true,
+        ocrResults: Map<Int, OcrPageResult>? = null
     ): File = withContext(Dispatchers.IO) {
         val pdfDocument = PdfDocument()
 
@@ -182,7 +245,12 @@ object DocumentScanProcessor {
         pages.forEachIndexed { index, scannedPage ->
             val rawBitmap = loadBitmapFromUri(context, scannedPage.sourceUri)
             if (rawBitmap != null) {
-                val processed = processBitmap(rawBitmap, scannedPage.filter, scannedPage.rotationDegrees)
+                val processed = processBitmap(
+                    source = rawBitmap,
+                    filter = scannedPage.filter,
+                    rotationDegrees = scannedPage.rotationDegrees,
+                    filterIntensity = scannedPage.filterIntensity
+                )
 
                 val pageInfo = PdfDocument.PageInfo.Builder(standardWidth, standardHeight, index + 1).create()
                 val page = pdfDocument.startPage(pageInfo)
@@ -206,6 +274,28 @@ object DocumentScanProcessor {
                 val destRect = RectF(left, top, left + destW, top + destH)
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
                 canvas.drawBitmap(processed, null, destRect, paint)
+
+                // Embed searchable OCR invisible text layer if available
+                val ocrPage = ocrResults?.get(index)
+                if (ocrPage != null && ocrPage.blocks.isNotEmpty()) {
+                    val ocrPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = android.graphics.Color.TRANSPARENT // Transparent text layer in PDF stream
+                    }
+
+                    ocrPage.blocks.forEach { block ->
+                        block.lines.forEach { line ->
+                            val box = line.boundingBox
+                            val lineLeft = destRect.left + (box.left * destRect.width())
+                            val lineTop = destRect.top + (box.top * destRect.height())
+                            val lineH = box.height() * destRect.height()
+
+                            val baselineY = lineTop + (lineH * 0.8f)
+                            ocrPaint.textSize = Math.max(8f, lineH * 0.75f)
+
+                            canvas.drawText(line.text, lineLeft, baselineY, ocrPaint)
+                        }
+                    }
+                }
 
                 pdfDocument.finishPage(page)
                 if (processed != rawBitmap) {
@@ -232,3 +322,4 @@ object DocumentScanProcessor {
         finalPdfFile
     }
 }
+

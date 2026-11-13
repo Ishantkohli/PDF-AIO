@@ -35,6 +35,16 @@ fun LiquidModeReader(
     onClose: () -> Unit,
     onReadAloud: (String) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        val activity = context as? android.app.Activity
+        if (activity != null) {
+            com.example.data.fps.DisplayRefreshRateManager.setTargetRefreshRate(activity, 60)
+        } else {
+            com.example.data.fps.DisplayRefreshRateManager.setPreferredRefreshRate(60)
+        }
+    }
+
     var fontSize by remember { mutableFloatStateOf(16f) }
     var readingTheme by remember { mutableStateOf("DARK") } // DARK, LIGHT, SEPIA, OLED
     var isFontSettingsOpen by remember { mutableStateOf(false) }

@@ -52,6 +52,9 @@ fun SignatureVaultScreen(viewModel: PdfViewModel) {
     val currentPage by viewModel.currentPage.collectAsStateWithLifecycle()
     val totalPages by viewModel.totalPages.collectAsStateWithLifecycle()
 
+    val activeThemeStyle by ThemeManager.currentTheme.collectAsStateWithLifecycle()
+    val isLiquidTheme = activeThemeStyle == AppThemeStyle.LIQUID_GLASS || activeThemeStyle == AppThemeStyle.FROSTED_CRYSTAL
+
     var showSignDialog by remember { mutableStateOf(false) }
     var stampingSignature by remember { mutableStateOf<SignatureEntity?>(null) }
 
@@ -297,11 +300,11 @@ fun SignatureVaultScreen(viewModel: PdfViewModel) {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AdfMidnightBackground
+                    containerColor = if (isLiquidTheme) Color.Transparent else AdfMidnightBackground
                 )
             )
         },
-        containerColor = AdfMidnightBackground
+        containerColor = if (isLiquidTheme) Color.Transparent else AdfMidnightBackground
     ) { padding ->
         LazyColumn(
             modifier = Modifier

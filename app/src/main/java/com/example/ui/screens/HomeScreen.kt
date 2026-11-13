@@ -90,6 +90,8 @@ fun HomeScreen(
     val isScanning by viewModel.isScanningDeviceFiles.collectAsStateWithLifecycle()
     val currentRefreshRate by DisplayRefreshRateManager.currentRefreshRate.collectAsStateWithLifecycle()
     val showFpsHud by viewModel.showFpsHud.collectAsStateWithLifecycle()
+    val activeThemeStyle by ThemeManager.currentTheme.collectAsStateWithLifecycle()
+    val isLiquidTheme = activeThemeStyle == AppThemeStyle.LIQUID_GLASS || activeThemeStyle == AppThemeStyle.FROSTED_CRYSTAL
 
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -130,20 +132,6 @@ fun HomeScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    LaunchedEffect(Unit) {
-        if (activity != null) {
-            DisplayRefreshRateManager.unlockMaxRefreshRate(activity)
-            if (DisplayRefreshRateManager.currentRefreshRate.value < 60) {
-                DisplayRefreshRateManager.setTargetRefreshRate(activity, 60)
-            }
-        }
-        val savedFolder = DeviceDocumentScanner.getPersistedTreeUri(context)
-        if (savedFolder != null) {
-            viewModel.scanFolderTree(savedFolder)
-        }
-        viewModel.scanDeviceDocuments()
     }
 
     val documentPickerLauncher = rememberLauncherForActivityResult(
@@ -218,6 +206,25 @@ fun HomeScreen(
                 hasStoragePerm = true
                 viewModel.scanDeviceDocuments()
             }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (activity != null) {
+            DisplayRefreshRateManager.unlockMaxRefreshRate(activity)
+            if (DisplayRefreshRateManager.currentRefreshRate.value < 60) {
+                DisplayRefreshRateManager.setTargetRefreshRate(activity, 60)
+            }
+        }
+        val savedFolder = DeviceDocumentScanner.getPersistedTreeUri(context)
+        if (savedFolder != null) {
+            viewModel.scanFolderTree(savedFolder)
+        }
+        viewModel.scanDeviceDocuments()
+
+        // Auto-prompt user for storage permissions on startup for fresh app installations
+        if (!hasStoragePerm) {
+            triggerFullScan()
         }
     }
 
@@ -341,27 +348,12 @@ fun HomeScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = "PDF AIO",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp),
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
                                     color = AdfTextPrimary
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = AdfElectricCyan.copy(alpha = 0.12f),
-                                    border = CardDefaults.outlinedCardBorder().copy(brush = Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))),
-                                    modifier = Modifier.clickable { showRefreshRateDialog = true }
-                                ) {
-                                    Text(
-                                        text = "${currentRefreshRate}Hz",
-                                        color = AdfElectricCyan,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                    )
-                                }
                             }
                             Text(
-                                text = "Next-Gen PDF & Office Suite",
+                                text = "All Documents & Files",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                 color = AdfTextSecondary
                             )
@@ -411,13 +403,7 @@ fun HomeScreen(
                         )
                     }
 
-                    // FPS Tuning Dialog
-                    IconButton(
-                        onClick = { showRefreshRateDialog = true },
-                        modifier = Modifier.testTag("refresh_rate_toggle_button")
-                    ) {
-                        AdfIcon.FpsSpeed(size = 20.dp)
-                    }
+
 
                     // 3 Lines Core Suite Menu Button
                     IconButton(
@@ -438,7 +424,7 @@ fun HomeScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AdfMidnightBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = if (isLiquidTheme) Color.Transparent else AdfMidnightBackground)
             )
         },
         floatingActionButton = {
@@ -458,7 +444,7 @@ fun HomeScreen(
                             )
                         )
                     },
-                    containerColor = AdfSurfaceCard,
+                    containerColor = if (isLiquidTheme) GlassSurfaceDark else AdfSurfaceCard,
                     contentColor = AdfElectricCyan,
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
@@ -479,7 +465,7 @@ fun HomeScreen(
                 )
             }
         },
-        containerColor = AdfMidnightBackground
+        containerColor = if (isLiquidTheme) Color.Transparent else AdfMidnightBackground
     ) { padding ->
         Box(
             modifier = Modifier
@@ -562,213 +548,7 @@ fun HomeScreen(
                     }
                 }
 
-                // Section 1: Scan to PDF & Core Suite Quick Menu Bar
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                    ) {
-                        // Hero Scan to PDF Card (Adobe Scan Engine)
-                        Card(
-                            onClick = { viewModel.navigateTo(AppScreen.SCANNER) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .border(
-                                    width = 1.dp,
-                                    brush = Brush.horizontalGradient(
-                                        listOf(AdfCoral, AdfElectricCyan)
-                                    ),
-                                    shape = RoundedCornerShape(16.dp)
-                                )
-                                .testTag("hero_scan_document_card"),
-                            colors = CardDefaults.cardColors(containerColor = AdfObsidianSurface)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(AdfCoral.copy(alpha = 0.16f))
-                                        .border(1.dp, AdfCoral.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    AdfIcon.Camera(size = 24.dp, primaryColor = AdfCoral, accentColor = Color.White)
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = "SCAN TO PDF",
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                            color = AdfTextPrimary
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color = AdfCoral.copy(alpha = 0.18f)
-                                        ) {
-                                            Text(
-                                                text = "ADOBE SCAN",
-                                                color = AdfCoral,
-                                                fontSize = 8.5.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                            )
-                                        }
-                                    }
-                                    Text(
-                                        text = "Snap receipts, notes & contracts with Magic Color paper whitening",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                        color = AdfTextSecondary
-                                    )
-                                }
-                                AdfIcon.ChevronRight(size = 20.dp, color = AdfElectricCyan)
-                            }
-                        }
 
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("core_suite_quick_banner")
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { showCoreSuiteMenu = true }
-                                .border(
-                                    width = 1.dp,
-                                    brush = Brush.horizontalGradient(
-                                        listOf(AdfElectricCyan.copy(alpha = 0.6f), AdfCyberViolet.copy(alpha = 0.4f), AdfVibrantBlue.copy(alpha = 0.5f))
-                                    ),
-                                    shape = RoundedCornerShape(14.dp)
-                                ),
-                            colors = CardDefaults.cardColors(containerColor = AdfSurfaceCard)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(RoundedCornerShape(9.dp))
-                                            .background(AdfElectricCyan.copy(alpha = 0.15f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        AdfIcon.MenuThreeLines(size = 18.dp, color = AdfElectricCyan)
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = "CORE SUITE MENU",
-                                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                                color = AdfTextPrimary
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(4.dp),
-                                                color = AdfElectricCyan.copy(alpha = 0.12f)
-                                            ) {
-                                                Text(
-                                                    text = "7 TOOLS",
-                                                    color = AdfElectricCyan,
-                                                    fontSize = 8.5.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                        }
-                                        Text(
-                                            text = "Scan • Convert • Credits • FPS • Pure Viewer • Sign • Watermark",
-                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                            color = AdfTextSecondary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                }
-                                AdfIcon.ChevronRight(size = 20.dp, color = AdfElectricCyan)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Fast Horizontal Shortcut Pills
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            item {
-                                QuickToolChip("1. Scan PDF", "CAMERA", AdfCoral) {
-                                    viewModel.navigateTo(AppScreen.SCANNER)
-                                }
-                            }
-                            item {
-                                QuickToolChip("2. Convertion", "HUB", AdfElectricCyan) {
-                                    viewModel.navigateTo(AppScreen.CONVERSION_HUB)
-                                }
-                            }
-                            item {
-                                QuickToolChip("3. Credits", "10/10/2026", Color(0xFFD946EF)) {
-                                    viewModel.navigateTo(AppScreen.CREDITS)
-                                }
-                            }
-                            item {
-                                QuickToolChip("4. FPS", "${currentRefreshRate}Hz", Color(0xFF10B981)) {
-                                    showRefreshRateDialog = true
-                                }
-                            }
-                            item {
-                                QuickToolChip("5. Pure Viewer", "NO EDIT", AdfCyberViolet) {
-                                    viewModel.setPureViewerMode(true)
-                                    val firstDoc = documents.firstOrNull()
-                                    if (firstDoc != null) {
-                                        viewModel.openDocument(firstDoc)
-                                    } else {
-                                        documentPickerLauncher.launch(arrayOf("application/pdf"))
-                                    }
-                                }
-                            }
-                            item {
-                                QuickToolChip("6. Signature", "VAULT", AdfAmber) {
-                                    viewModel.navigateTo(AppScreen.SIGNATURE_VAULT)
-                                }
-                            }
-                            item {
-                                QuickToolChip("7. Watermark", "STUDIO", AdfElectricCyan) {
-                                    viewModel.setSelectedToolTab(4)
-                                    viewModel.navigateTo(AppScreen.TOOLS)
-                                }
-                            }
-                            item {
-                                QuickToolChip("8. QR Scanner", "SCANNER", Color.White) {
-                                    showQrScannerDialog = true
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Offline QR Share App & Download Card
-                item {
-                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                        ShareAppCard()
-                    }
-                }
 
                 // Section 2: Storage Document Library Header & Search
                 item {
@@ -859,10 +639,10 @@ fun HomeScreen(
                             },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = AdfObsidianSurface,
-                                unfocusedContainerColor = AdfObsidianSurface,
-                                focusedBorderColor = AdfElectricCyan,
-                                unfocusedBorderColor = AdfBorderSubtle,
+                                focusedContainerColor = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface,
+                                unfocusedContainerColor = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface,
+                                focusedBorderColor = if (isLiquidTheme) Color(0xFF38BDF8) else AdfElectricCyan,
+                                unfocusedBorderColor = if (isLiquidTheme) Color(0x38FFFFFF) else AdfBorderSubtle,
                                 focusedTextColor = AdfTextPrimary,
                                 unfocusedTextColor = AdfTextPrimary
                             ),
@@ -1316,12 +1096,15 @@ fun UnifiedDocumentCard(
         else -> "FILE"
     }
 
+    val activeThemeStyle by ThemeManager.currentTheme.collectAsStateWithLifecycle()
+    val isLiquidTheme = activeThemeStyle == AppThemeStyle.LIQUID_GLASS || activeThemeStyle == AppThemeStyle.FROSTED_CRYSTAL
+
     Card(
         onClick = onOpenStandard,
-        colors = CardDefaults.cardColors(containerColor = AdfObsidianSurface),
-        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface),
+        shape = RoundedCornerShape(16.dp),
         border = CardDefaults.outlinedCardBorder().copy(
-            brush = Brush.linearGradient(
+            brush = if (isLiquidTheme) LiquidGlassBorderGradient else Brush.linearGradient(
                 listOf(
                     AdfBorderSubtle,
                     badgeColor.copy(alpha = 0.25f)

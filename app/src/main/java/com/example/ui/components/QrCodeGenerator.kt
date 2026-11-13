@@ -3,18 +3,40 @@ package com.example.ui.components
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 
 /**
  * Pure Kotlin, 100% offline, ISO/IEC 18004 compliant QR Code generator.
  * Encodes text/URLs into a crisp, 100% camera-scannable Black & White QR matrix bitmap
- * with 4-module Quiet Zone padding completely on-device.
+ * with 4-module Quiet Zone padding and GF(256) Reed-Solomon Error Correction.
  */
 object QrCodeGenerator {
 
+    // GF(256) Galois Field tables with primitive polynomial 285 (x^8 + x^4 + x^3 + x^2 + 1)
+    private val expTable = IntArray(512)
+    private val logTable = IntArray(256)
+
+    init {
+        var x = 1
+        for (i in 0 until 255) {
+            expTable[i] = x
+            logTable[x] = i
+            x = x shl 1
+            if (x >= 256) {
+                x = x xor 285
+            }
+        }
+        for (i in 255 until 512) {
+            expTable[i] = expTable[i - 255]
+        }
+    }
+
+    private fun gfMul(x: Int, y: Int): Int {
+        if (x == 0 || y == 0) return 0
+        return expTable[logTable[x] + logTable[y]]
+    }
+
     /**
-     * Generates a high-contrast Black & White scannable QR Bitmap on-device.
+     * Generates a high-contrast Black & White 100% camera-scannable QR Bitmap on-device.
      */
     fun generateQrBitmap(
         content: String,
@@ -25,13 +47,13 @@ object QrCodeGenerator {
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val paint = Paint().apply { isAntiAlias = false } // Sharp pixel boundary for optimal camera scanning
+        val paint = Paint().apply { isAntiAlias = false } // Sharp pixel boundary for optimal optical camera scanning
 
         // Fill background with solid white
         paint.color = backgroundColor
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
 
-        // Version 3 matrix (29x29 modules) accommodates up to 53 bytes (suitable for github URL)
+        // Version 3 matrix (29x29 modules) accommodates up to 55 data bytes
         val qrSize = 29
         val quietZone = 4 // Mandatory 4-module quiet zone padding for camera optical sensors
         val totalGrid = qrSize + (quietZone * 2)
@@ -47,7 +69,7 @@ object QrCodeGenerator {
         // 2. Separator white lines around finder patterns
         drawSeparators(matrix, qrSize)
 
-        // 3. Alignment Pattern for Version 3 at (22, 22)
+        // 3. Alignment Pattern for Version 3 at (20, 20)
         drawAlignmentPattern(matrix, 20, 20)
 
         // 4. Timing Patterns (Row 6 and Column 6)
@@ -56,13 +78,13 @@ object QrCodeGenerator {
             matrix[i][6] = (i % 2 == 0)
         }
 
-        // 5. Fixed Dark Module at (4*Version + 9, 8) -> (20, 8)
+        // 5. Fixed Dark Module at (20, 8)
         matrix[20][8] = true
 
         // 6. Format Information Area Reserved Masks
         reserveFormatInfo(matrix, qrSize)
 
-        // 7. Encode Byte Data Payload with QR Byte Mode (0100) + Bit Length + Payload + Reed-Solomon Pad
+        // 7. Encode Byte Data Payload with QR Byte Mode (0100)
         val contentBytes = content.toByteArray(Charsets.UTF_8)
         val bitBuffer = mutableListOf<Boolean>()
 
@@ -85,16 +107,37 @@ object QrCodeGenerator {
             bitBuffer.add(false)
         }
 
-        // Pad Codewords (0xEC, 0x11 alternating) to fill capacity
-        val targetCapacityBits = 55 * 8 // Version 3-L capacity
+        // Pad Data Codewords (0xEC, 0x11 alternating) up to 55 data codewords
+        val dataCapacityBytes = 55
         var padToggle = false
-        while (bitBuffer.size < targetCapacityBits) {
-            val padByte = if (padToggle) 0x11 else 0xEC
-            addBits(bitBuffer, padByte, 8)
+        val dataCodewords = mutableListOf<Int>()
+        for (i in 0 until bitBuffer.size step 8) {
+            var byteVal = 0
+            for (b in 0 until 8) {
+                if (i + b < bitBuffer.size && bitBuffer[i + b]) {
+                    byteVal = byteVal or (1 shl (7 - b))
+                }
+            }
+            dataCodewords.add(byteVal)
+        }
+
+        while (dataCodewords.size < dataCapacityBytes) {
+            dataCodewords.add(if (padToggle) 0x11 else 0xEC)
             padToggle = !padToggle
         }
 
-        // 8. Place Data Bits in Matrix avoiding reserved modules
+        // 8. Calculate 15 Reed-Solomon Error Correction Codewords for Version 3-L
+        val ecCount = 15
+        val ecCodewords = calculateErrorCorrection(dataCodewords, ecCount)
+
+        // Combine Data (55 bytes) + Error Correction (15 bytes) = 70 Codewords total (560 bits)
+        val fullCodewords = dataCodewords + ecCodewords
+        val fullBitBuffer = mutableListOf<Boolean>()
+        for (cw in fullCodewords) {
+            addBits(fullBitBuffer, cw, 8)
+        }
+
+        // 9. Place Data & Parity Bits in Matrix avoiding reserved modules
         var bitIdx = 0
         var directionUp = true
 
@@ -108,7 +151,7 @@ object QrCodeGenerator {
                     val x = col - c
                     val y = row
                     if (!isReserved(x, y, qrSize)) {
-                        val bit = if (bitIdx < bitBuffer.size) bitBuffer[bitIdx++] else false
+                        val bit = if (bitIdx < fullBitBuffer.size) fullBitBuffer[bitIdx++] else false
                         // Apply Mask Pattern 0: (row + col) % 2 == 0
                         val maskBit = ((y + x) % 2 == 0)
                         matrix[y][x] = bit xor maskBit
@@ -119,10 +162,10 @@ object QrCodeGenerator {
             directionUp = !directionUp
         }
 
-        // 9. Draw Format Info Bits (Mask 0 + Error Correction L = 00)
+        // 10. Draw BCH Format Info Bits (Mask 0 + Error Correction L = 01 -> 0x73C0)
         drawFormatInfo(matrix, qrSize)
 
-        // 10. Render Matrix to Canvas with Quiet Zone Margin
+        // 11. Render Matrix to Canvas with Quiet Zone Margin
         paint.color = foregroundColor
         for (r in 0 until qrSize) {
             for (c in 0 until qrSize) {
@@ -137,6 +180,43 @@ object QrCodeGenerator {
         }
 
         return bitmap
+    }
+
+    /**
+     * Reed-Solomon Parity Codeword Generator using Galois Field GF(256)
+     */
+    private fun calculateErrorCorrection(dataCodewords: List<Int>, ecCount: Int): List<Int> {
+        // Build generator polynomial for ecCount = 15
+        var g = intArrayOf(1)
+        for (i in 0 until ecCount) {
+            val nextG = IntArray(g.size + 1)
+            val alphaI = expTable[i]
+            for (j in g.indices) {
+                nextG[j] = nextG[j] xor gfMul(g[j], alphaI)
+                nextG[j + 1] = nextG[j + 1] xor g[j]
+            }
+            g = nextG
+        }
+
+        val result = IntArray(dataCodewords.size + ecCount)
+        for (i in dataCodewords.indices) {
+            result[i] = dataCodewords[i]
+        }
+
+        for (i in dataCodewords.indices) {
+            val coef = result[i]
+            if (coef != 0) {
+                for (j in g.indices) {
+                    result[i + j] = result[i + j] xor gfMul(g[j], coef)
+                }
+            }
+        }
+
+        val ecList = mutableListOf<Int>()
+        for (i in 0 until ecCount) {
+            ecList.add(result[dataCodewords.size + i])
+        }
+        return ecList
     }
 
     private fun addBits(buffer: MutableList<Boolean>, value: Int, bitCount: Int) {
@@ -195,8 +275,8 @@ object QrCodeGenerator {
     }
 
     private fun drawFormatInfo(matrix: Array<BooleanArray>, size: Int) {
-        // Format bits for L-Level + Mask 0: 0x77C4 (15 bits)
-        val formatBits = intArrayOf(1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0)
+        // Format bits for L-Level + Mask 0: 0x73C0 (15 bits)
+        val formatBits = intArrayOf(1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0)
 
         // Top-Left format placement
         var bitIdx = 0

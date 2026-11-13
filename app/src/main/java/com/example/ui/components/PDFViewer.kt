@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
@@ -12,6 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.fps.DisplayRefreshRateManager
 import com.example.data.local.DocumentEntity
 import com.example.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -187,6 +191,26 @@ fun PDFViewer(
 ) {
     val context = LocalContext.current
     var renderResult by remember { mutableStateOf<PdfRenderResult>(PdfRenderResult.Idle) }
+
+    // Lock display refresh rate to 60 FPS for all document rendering
+    LaunchedEffect(Unit) {
+        val activity = context as? Activity
+        if (activity != null) {
+            DisplayRefreshRateManager.setTargetRefreshRate(activity, 60)
+        } else {
+            DisplayRefreshRateManager.setPreferredRefreshRate(60)
+        }
+    }
+
+    // Zoom & Pan gesture states
+    var zoomScale by remember { mutableFloatStateOf(1f) }
+    var panOffset by remember { mutableStateOf(Offset.Zero) }
+
+    // Reset zoom state on page change
+    LaunchedEffect(state.currentPage) {
+        zoomScale = 1f
+        panOffset = Offset.Zero
+    }
 
     // Page cache to store rendered bitmaps in-memory for seamless forward/back transitions
     val pageBitmapCache = remember { mutableMapOf<Int, Bitmap>() }
@@ -356,7 +380,7 @@ fun PDFViewer(
         modifier = modifier
             .background(backgroundColor)
             .then(
-                if (enableSwipeGestures && state.pageCount > 1) {
+                if (enableSwipeGestures && state.pageCount > 1 && zoomScale <= 1.05f) {
                     Modifier.pointerInput(state.currentPage, state.pageCount) {
                         var totalDrag = 0f
                         detectHorizontalDragGestures(
@@ -400,10 +424,47 @@ fun PDFViewer(
             is PdfRenderResult.Success -> {
                 val bmp = result.bitmap
 
-                // Canvas Implementation: Render current page onto Jetpack Compose Canvas
+                // Canvas Implementation: Render current page onto Jetpack Compose Canvas with smooth zoom & pan
                 Canvas(
                     modifier = Modifier
                         .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = zoomScale
+                            scaleY = zoomScale
+                            translationX = panOffset.x
+                            translationY = panOffset.y
+                        }
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                val newZoom = (zoomScale * zoom).coerceIn(1f, 5f)
+                                zoomScale = newZoom
+                                if (newZoom > 1.05f) {
+                                    val maxPanX = (size.width * (newZoom - 1f) / 2f).coerceAtLeast(0f)
+                                    val maxPanY = (size.height * (newZoom - 1f) / 2f).coerceAtLeast(0f)
+                                    val speedMultiplier = 1.85f
+                                    panOffset = Offset(
+                                        x = (panOffset.x + pan.x * speedMultiplier).coerceIn(-maxPanX, maxPanX),
+                                        y = (panOffset.y + pan.y * speedMultiplier).coerceIn(-maxPanY, maxPanY)
+                                    )
+                                } else {
+                                    zoomScale = 1f
+                                    panOffset = Offset.Zero
+                                }
+                            }
+                        }
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    if (zoomScale > 1.2f) {
+                                        zoomScale = 1f
+                                        panOffset = Offset.Zero
+                                    } else {
+                                        zoomScale = 2.5f
+                                        panOffset = Offset.Zero
+                                    }
+                                }
+                            )
+                        }
                         .testTag("pdf_viewer_page_canvas")
                 ) {
                     val canvasWidth = size.width
@@ -463,8 +524,46 @@ fun PDFViewer(
                     customCanvasOverlay?.invoke(this, dstW, dstH, scale)
                 }
 
-                // Interactive Multi-Page Navigation Bar Overlay (strictly excluded from compact or thumbnail displays)
                 val isThumbnailOrCompact = maxWidth < 140.dp || maxHeight < 140.dp
+
+                // 4K Auto-Ultra Clarity Active Badge on Zoom
+                if (zoomScale > 1.2f && !isThumbnailOrCompact) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xDD0F172A),
+                        border = CardDefaults.outlinedCardBorder().copy(
+                            brush = Brush.horizontalGradient(
+                                listOf(AdfElectricCyan, Color(0xFF10B981))
+                            )
+                        ),
+                        shadowElevation = 6.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp)
+                            .testTag("pdf_viewer_4k_badge")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF10B981))
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "✨ 4K Ultra-Clarity Active (${String.format("%.1fx", zoomScale)})",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+                }
+
+                // Interactive Multi-Page Navigation Bar Overlay (strictly excluded from compact or thumbnail displays)
                 if (enablePageNavigation && !isThumbnailOrCompact && state.pageCount > 1) {
                     PdfPageNavigationBar(
                         state = state,

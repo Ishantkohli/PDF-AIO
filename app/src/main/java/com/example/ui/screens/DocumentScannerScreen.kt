@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.RotateLeft
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -33,8 +34,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,7 +45,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.example.data.local.DocumentEntity
+import com.example.data.scan.DocumentOcrEngine
 import com.example.data.scan.DocumentScanProcessor
+import com.example.data.scan.OcrPageResult
 import com.example.data.scan.ScanFilter
 import com.example.data.scan.ScannedPage
 import com.example.ui.AppScreen
@@ -67,11 +72,14 @@ fun DocumentScannerScreen(
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val activeThemeStyle by ThemeManager.currentTheme.collectAsState()
+    val isLiquidTheme = activeThemeStyle == AppThemeStyle.LIQUID_GLASS || activeThemeStyle == AppThemeStyle.FROSTED_CRYSTAL
 
     val scannedPages = remember { mutableStateListOf<ScannedPage>() }
     var selectedPageIndex by remember { mutableIntStateOf(0) }
     var isCaptureViewActive by remember { mutableStateOf(true) }
     var isFlashOn by remember { mutableStateOf(false) }
+    var isCropOverlayActive by remember { mutableStateOf(false) }
     var documentTitle by remember {
         mutableStateOf("Scan_${SimpleDateFormat("dd_MMM_yyyy", Locale.getDefault()).format(Date())}")
     }
@@ -79,6 +87,12 @@ fun DocumentScannerScreen(
     var isProcessingPdf by remember { mutableStateOf(false) }
     var savedPdfEntity by remember { mutableStateOf<DocumentEntity?>(null) }
     var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var filterThumbnailsMap by remember { mutableStateOf<Map<ScanFilter, Bitmap>>(emptyMap()) }
+
+    var isRunningOcr by remember { mutableStateOf(false) }
+    var ocrResultsMap by remember { mutableStateOf<Map<Int, OcrPageResult>>(emptyMap()) }
+    var showOcrDialog by remember { mutableStateOf(false) }
+    var editedTextMap by remember { mutableStateOf<MutableMap<Int, String>>(mutableMapOf()) }
 
     var tempCameraImageUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -103,7 +117,8 @@ fun DocumentScannerScreen(
         if (success && tempCameraImageUri != null) {
             val newPage = ScannedPage(
                 sourceUri = tempCameraImageUri!!,
-                filter = ScanFilter.MAGIC_COLOR
+                filter = ScanFilter.WHITE_GREY,
+                filterIntensity = 1.0f
             )
             scannedPages.add(newPage)
             selectedPageIndex = scannedPages.size - 1
@@ -133,7 +148,8 @@ fun DocumentScannerScreen(
                 scannedPages.add(
                     ScannedPage(
                         sourceUri = uri,
-                        filter = ScanFilter.MAGIC_COLOR
+                        filter = ScanFilter.WHITE_GREY,
+                        filterIntensity = 1.0f
                     )
                 )
             }
@@ -175,7 +191,7 @@ fun DocumentScannerScreen(
             p.textSize = 28f
             p.isFakeBoldText = false
             p.color = AndroidColor.GRAY
-            c.drawText("PDF AIO Adobe Scan Engine • Document Verified", 80f, 210f, p)
+            c.drawText("PDF AIO Document Scanner • 100% On-Device Engine", 80f, 210f, p)
             c.drawLine(80f, 240f, 1120f, 240f, p)
 
             // Body text lines
@@ -199,7 +215,7 @@ fun DocumentScannerScreen(
                 )
             } else {
                 listOf(
-                    "INVOICE #: INV-2026-08912          DATE: Oct 21, 2026",
+                    "INVOICE #: INV-2026-08912          DATE: Oct 28, 2026",
                     "BILLED TO: Enterprise Global Corp.",
                     "",
                     "ITEM DESCRIPTION                     QTY    RATE      AMOUNT",
@@ -228,7 +244,8 @@ fun DocumentScannerScreen(
 
             val page = ScannedPage(
                 sourceUri = Uri.fromFile(sampleFile),
-                filter = ScanFilter.MAGIC_COLOR
+                filter = ScanFilter.WHITE_GREY,
+                filterIntensity = 1.0f
             )
 
             withContext(Dispatchers.Main) {
@@ -239,20 +256,61 @@ fun DocumentScannerScreen(
         }
     }
 
-    // Refresh active preview bitmap whenever selected page or its filter/rotation changes
-    LaunchedEffect(scannedPages.toList(), selectedPageIndex, isCaptureViewActive) {
-        if (!isCaptureViewActive && scannedPages.isNotEmpty()) {
-            val activePage = scannedPages.getOrNull(selectedPageIndex) ?: return@LaunchedEffect
+    val activePage = scannedPages.getOrNull(selectedPageIndex)
+    val activeFilter = activePage?.filter ?: ScanFilter.WHITE_GREY
+    val activeRotation = activePage?.rotationDegrees ?: 0
+    val activeIntensity = activePage?.filterIntensity ?: 1.0f
+
+    var cachedRawBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var cachedUri by remember { mutableStateOf<Uri?>(null) }
+
+    // Asynchronously refresh the high-resolution preview bitmap with in-memory caching
+    LaunchedEffect(
+        selectedPageIndex,
+        activeFilter,
+        activeRotation,
+        activeIntensity,
+        isCaptureViewActive,
+        activePage?.id,
+        scannedPages.size
+    ) {
+        if (!isCaptureViewActive && activePage != null) {
             withContext(Dispatchers.IO) {
-                val raw = DocumentScanProcessor.loadBitmapFromUri(context, activePage.sourceUri)
+                var raw = cachedRawBitmap
+                if (raw == null || cachedUri != activePage.sourceUri) {
+                    raw = DocumentScanProcessor.loadBitmapFromUri(context, activePage.sourceUri)
+                    cachedRawBitmap = raw
+                    cachedUri = activePage.sourceUri
+                }
+
                 if (raw != null) {
                     val processed = DocumentScanProcessor.processBitmap(
                         source = raw,
-                        filter = activePage.filter,
-                        rotationDegrees = activePage.rotationDegrees
+                        filter = activeFilter,
+                        rotationDegrees = activeRotation,
+                        filterIntensity = activeIntensity
                     )
                     withContext(Dispatchers.Main) {
                         previewBitmap = processed
+                    }
+                }
+            }
+        }
+    }
+
+    // Generate live thumbnail previews for each filter option in the filter bar
+    LaunchedEffect(selectedPageIndex, isCaptureViewActive, activePage?.sourceUri) {
+        if (!isCaptureViewActive && activePage != null) {
+            withContext(Dispatchers.IO) {
+                val raw = DocumentScanProcessor.loadBitmapFromUri(context, activePage.sourceUri, maxDimension = 300)
+                if (raw != null) {
+                    val thumbs = mutableMapOf<ScanFilter, Bitmap>()
+                    ScanFilter.entries.forEach { filterOption ->
+                        val thumb = DocumentScanProcessor.createFilterPreviewThumbnail(raw, filterOption, targetSize = 100)
+                        thumbs[filterOption] = thumb
+                    }
+                    withContext(Dispatchers.Main) {
+                        filterThumbnailsMap = thumbs
                     }
                 }
             }
@@ -276,26 +334,11 @@ fun DocumentScannerScreen(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "PDF AIO SCANNER",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                    color = AdfTextPrimary
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = AdfCoral.copy(alpha = 0.15f)
-                                ) {
-                                    Text(
-                                        text = "ADOBE SCAN ENGINE",
-                                        color = AdfCoral,
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                    )
-                                }
-                            }
+                            Text(
+                                text = "Document Scanner",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = AdfTextPrimary
+                            )
                             Text(
                                 text = if (scannedPages.isEmpty()) "Live Camera • Align Document" else "${scannedPages.size} ${if (scannedPages.size == 1) "Page" else "Pages"} Scanned",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
@@ -321,7 +364,7 @@ fun DocumentScannerScreen(
                     IconButton(
                         onClick = {
                             isFlashOn = !isFlashOn
-                            Toast.makeText(context, if (isFlashOn) "Torch Active" else "Torch Off", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, if (isFlashOn) "Flash Torch Active" else "Torch Off", Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.testTag("scanner_flash_toggle")
                     ) {
@@ -332,7 +375,7 @@ fun DocumentScannerScreen(
                         )
                     }
 
-                    // Add Page / Retake icon if reviewing
+                    // Add Page icon when reviewing
                     if (!isCaptureViewActive) {
                         IconButton(
                             onClick = { isCaptureViewActive = true },
@@ -346,16 +389,22 @@ fun DocumentScannerScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AdfMidnightBackground)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = if (isLiquidTheme) GlassSurfaceDark else AdfMidnightBackground
+                )
             )
         },
-        containerColor = AdfMidnightBackground
+        containerColor = if (isLiquidTheme) Color.Transparent else AdfMidnightBackground
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            if (isLiquidTheme) {
+                LiquidGlassBackground {}
+            }
+
             if (isCaptureViewActive) {
                 // ==============================================================
                 // VIEW 1: LIVE DOCUMENT VIEWFINDER & SHUTTER DOCK
@@ -370,7 +419,7 @@ fun DocumentScannerScreen(
                     // Header Guidance Pill
                     Surface(
                         shape = RoundedCornerShape(20.dp),
-                        color = AdfObsidianSurface,
+                        color = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface,
                         border = CardDefaults.outlinedCardBorder().copy(
                             brush = Brush.horizontalGradient(listOf(AdfElectricCyan.copy(alpha = 0.5f), AdfVibrantBlue.copy(alpha = 0.5f)))
                         )
@@ -387,7 +436,7 @@ fun DocumentScannerScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Auto-detecting edges • Align document in frame",
+                                text = "Auto edge detection • Position document in view",
                                 color = AdfTextPrimary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
@@ -398,11 +447,11 @@ fun DocumentScannerScreen(
                     // Central Viewfinder Reticle Frame (A4 document shape)
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(0.90f)
+                            .fillMaxWidth(0.92f)
                             .weight(1f)
-                            .padding(vertical = 16.dp)
+                            .padding(vertical = 12.dp)
                             .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF0F172A))
+                            .background(if (isLiquidTheme) Color(0x3B0F172A) else Color(0xFF0F172A))
                             .border(
                                 width = 2.dp,
                                 brush = Brush.linearGradient(
@@ -442,7 +491,7 @@ fun DocumentScannerScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.padding(24.dp)
                         ) {
-                            AdfIcon.Camera(size = 54.dp, primaryColor = AdfElectricCyan, accentColor = AdfCoral)
+                            AdfIcon.Camera(size = 56.dp, primaryColor = AdfElectricCyan, accentColor = AdfCoral)
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
                                 text = "READY TO SCAN",
@@ -451,7 +500,7 @@ fun DocumentScannerScreen(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Tap the round Shutter button below to snap your document, or select existing pages from your photo gallery.",
+                                text = "Tap the round Shutter button below to capture, or pick existing documents from your device library.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = AdfTextSecondary,
                                 textAlign = TextAlign.Center
@@ -485,7 +534,7 @@ fun DocumentScannerScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -497,9 +546,9 @@ fun DocumentScannerScreen(
                                 )
                             },
                             modifier = Modifier
-                                .size(50.dp)
+                                .size(52.dp)
                                 .clip(CircleShape)
-                                .background(AdfSurfaceCard)
+                                .background(if (isLiquidTheme) GlassSurfaceDark else AdfSurfaceCard)
                                 .border(1.dp, AdfBorderSubtle, CircleShape)
                                 .testTag("scanner_pick_photos_button")
                         ) {
@@ -513,7 +562,7 @@ fun DocumentScannerScreen(
                         // Central Shutter Button with glowing outer ring
                         Box(
                             modifier = Modifier
-                                .size(80.dp)
+                                .size(82.dp)
                                 .clip(CircleShape)
                                 .background(AdfElectricCyan.copy(alpha = 0.2f))
                                 .border(2.dp, AdfElectricCyan, CircleShape)
@@ -523,7 +572,7 @@ fun DocumentScannerScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(62.dp)
+                                    .size(64.dp)
                                     .clip(CircleShape)
                                     .background(Color.White)
                                     .shadow(elevation = 6.dp, shape = CircleShape)
@@ -537,24 +586,24 @@ fun DocumentScannerScreen(
                                 onClick = { isCaptureViewActive = false }
                             )
                         } else {
-                            Spacer(modifier = Modifier.size(50.dp))
+                            Spacer(modifier = Modifier.size(52.dp))
                         }
                     }
                 }
             } else {
                 // ==============================================================
-                // VIEW 2: ADOBE SCAN DOCUMENT REVIEW & ENHANCEMENT STUDIO
+                // VIEW 2: DOCUMENT REVIEW & INTERACTIVE FILTER STUDIO
                 // ==============================================================
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
                 ) {
-                    // Title Rename & Page Indicator Header
+                    // Document Title Input & Direct Page Tools
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 10.dp),
+                            .padding(bottom = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -567,7 +616,9 @@ fun DocumentScannerScreen(
                                 focusedTextColor = AdfTextPrimary,
                                 unfocusedTextColor = AdfTextPrimary,
                                 focusedBorderColor = AdfElectricCyan,
-                                unfocusedBorderColor = AdfBorderSubtle
+                                unfocusedBorderColor = AdfBorderSubtle,
+                                focusedContainerColor = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface,
+                                unfocusedContainerColor = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface
                             ),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
@@ -575,176 +626,532 @@ fun DocumentScannerScreen(
                                 .testTag("scanned_pdf_title_input")
                         )
 
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        // Rotate 90° Clockwise Button
-                        IconButton(
-                            onClick = {
-                                val current = scannedPages.getOrNull(selectedPageIndex)
-                                if (current != null) {
-                                    current.rotationDegrees = (current.rotationDegrees + 90) % 360
-                                    // Trigger re-render
-                                    scannedPages[selectedPageIndex] = current.copy()
-                                }
-                            },
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(AdfSurfaceCard)
-                                .border(1.dp, AdfBorderSubtle, RoundedCornerShape(10.dp))
-                                .testTag("scanner_rotate_page_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.RotateRight,
-                                contentDescription = "Rotate 90 Degrees",
-                                tint = AdfElectricCyan
-                            )
-                        }
-
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Delete Active Page Button
+                        // OCR Text Recognition Button
                         IconButton(
                             onClick = {
-                                if (scannedPages.isNotEmpty()) {
-                                    scannedPages.removeAt(selectedPageIndex)
-                                    if (scannedPages.isEmpty()) {
-                                        isCaptureViewActive = true
-                                    } else {
-                                        selectedPageIndex = selectedPageIndex.coerceIn(0, scannedPages.size - 1)
+                                if (scannedPages.isEmpty()) return@IconButton
+                                isRunningOcr = true
+                                coroutineScope.launch {
+                                    try {
+                                        val results = DocumentOcrEngine.processPagesOcr(context, scannedPages.toList())
+                                        ocrResultsMap = results
+                                        val initialEdits = mutableMapOf<Int, String>()
+                                        results.forEach { (idx, res) -> initialEdits[idx] = res.fullText }
+                                        editedTextMap = initialEdits
+                                        isRunningOcr = false
+                                        showOcrDialog = true
+                                        Toast.makeText(context, "OCR Complete: Extracted text from ${results.size} pages", Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                        isRunningOcr = false
+                                        Toast.makeText(context, "OCR Error: ${e.message}", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             },
                             modifier = Modifier
-                                .size(46.dp)
+                                .size(44.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(AdfCoral.copy(alpha = 0.12f))
-                                .border(1.dp, AdfCoral.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
-                                .testTag("scanner_delete_page_button")
+                                .background(AdfElectricCyan.copy(alpha = 0.15f))
+                                .border(1.dp, AdfElectricCyan.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                .testTag("scanner_ocr_button")
+                        ) {
+                            if (isRunningOcr) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = AdfElectricCyan,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.FindInPage,
+                                    contentDescription = "Extract Text (OCR)",
+                                    tint = AdfElectricCyan
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        // Toggle Crop Overlay
+                        IconButton(
+                            onClick = {
+                                isCropOverlayActive = !isCropOverlayActive
+                                Toast.makeText(
+                                    context,
+                                    if (isCropOverlayActive) "Edge cropping alignment active" else "Crop guides hidden",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isCropOverlayActive) AdfElectricCyan.copy(alpha = 0.25f) else (if (isLiquidTheme) GlassSurfaceDark else AdfSurfaceCard))
+                                .border(1.dp, if (isCropOverlayActive) AdfElectricCyan else AdfBorderSubtle, RoundedCornerShape(10.dp))
+                                .testTag("scanner_crop_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete Page",
-                                tint = AdfCoral
+                                imageVector = Icons.Default.Crop,
+                                contentDescription = "Adjust Crop",
+                                tint = if (isCropOverlayActive) AdfElectricCyan else AdfTextPrimary
                             )
                         }
                     }
 
-                    // Main Document Page Preview Canvas
+                    // Main Interactive Document Preview Box
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(AdfObsidianSurface)
-                            .border(1.dp, AdfBorderSubtle, RoundedCornerShape(14.dp))
-                            .padding(10.dp),
+                            .background(if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface)
+                            .border(
+                                1.dp,
+                                if (isLiquidTheme) LiquidGlassBorderGradient else Brush.horizontalGradient(listOf(AdfBorderSubtle, AdfBorderSubtle)),
+                                RoundedCornerShape(14.dp)
+                            )
+                            .padding(8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         val bmp = previewBitmap
                         if (bmp != null) {
-                            Image(
-                                bitmap = bmp.asImageBitmap(),
-                                contentDescription = "Scanned Page Preview",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .shadow(elevation = 6.dp, shape = RoundedCornerShape(4.dp)),
-                                contentScale = ContentScale.Fit
-                            )
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = "Scanned Page Preview",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .shadow(elevation = 6.dp, shape = RoundedCornerShape(4.dp)),
+                                    contentScale = ContentScale.Fit
+                                )
+
+                                // Interactive Crop Boundary Overlay lines
+                                if (isCropOverlayActive) {
+                                    Canvas(modifier = Modifier.fillMaxSize()) {
+                                        val w = size.width
+                                        val h = size.height
+                                        val pad = 24f
+                                        val cornerRadius = 16f
+                                        val strokeWidth = 4f
+                                        val lineCol = AdfElectricCyan
+
+                                        // Edge rectangle boundary
+                                        drawRect(
+                                            color = lineCol,
+                                            topLeft = androidx.compose.ui.geometry.Offset(pad, pad),
+                                            size = androidx.compose.ui.geometry.Size(w - (pad * 2), h - (pad * 2)),
+                                            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                                width = strokeWidth,
+                                                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(12f, 12f))
+                                            )
+                                        )
+
+                                        // Corner Handles
+                                        val handleR = 14f
+                                        val handleColor = AdfCoral
+                                        drawCircle(handleColor, handleR, androidx.compose.ui.geometry.Offset(pad, pad))
+                                        drawCircle(handleColor, handleR, androidx.compose.ui.geometry.Offset(w - pad, pad))
+                                        drawCircle(handleColor, handleR, androidx.compose.ui.geometry.Offset(pad, h - pad))
+                                        drawCircle(handleColor, handleR, androidx.compose.ui.geometry.Offset(w - pad, h - pad))
+                                    }
+                                }
+                            }
                         } else {
                             CircularProgressIndicator(color = AdfElectricCyan)
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Adobe Scan Enhancement Filter Selector Row
-                    Text(
-                        text = "DOCUMENT ENHANCEMENT FILTER",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = AdfTextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        val activePage = scannedPages.getOrNull(selectedPageIndex)
-                        items(ScanFilter.values().size) { idx ->
-                            val filter = ScanFilter.values()[idx]
-                            val isSelected = activePage?.filter == filter
-                            Surface(
-                                onClick = {
-                                    if (activePage != null) {
-                                        activePage.filter = filter
-                                        scannedPages[selectedPageIndex] = activePage.copy()
-                                    }
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (isSelected) AdfElectricCyan.copy(alpha = 0.18f) else AdfSurfaceCard,
-                                border = CardDefaults.outlinedCardBorder().copy(
-                                    brush = if (isSelected) Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))
-                                    else Brush.horizontalGradient(listOf(AdfBorderSubtle, AdfBorderSubtle))
-                                ),
-                                modifier = Modifier.testTag("filter_chip_${filter.name}")
+                        // Floating Quick Action Controls Bar (Rotate L/R, Move L/R, Duplicate, Delete)
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            color = Color(0xCC0B1329),
+                            border = BorderStroke(1.dp, AdfElectricCyan.copy(alpha = 0.4f)),
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                // Rotate Left (270 degrees clockwise / 90 counter-clockwise)
+                                IconButton(
+                                    onClick = {
+                                        if (activePage != null && selectedPageIndex in scannedPages.indices) {
+                                            val newRot = (activePage.rotationDegrees + 270) % 360
+                                            val updated = activePage.copy(rotationDegrees = newRot, id = UUID.randomUUID().toString())
+                                            scannedPages[selectedPageIndex] = updated
+                                            // Instantly reprocess preview in memory
+                                            cachedRawBitmap?.let { raw ->
+                                                previewBitmap = DocumentScanProcessor.processBitmap(
+                                                    source = raw,
+                                                    filter = updated.filter,
+                                                    rotationDegrees = updated.rotationDegrees,
+                                                    filterIntensity = updated.filterIntensity
+                                                )
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.size(36.dp).testTag("rotate_left_button")
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(if (isSelected) AdfElectricCyan else AdfTextMuted)
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.RotateLeft,
+                                        contentDescription = "Rotate Left",
+                                        tint = AdfElectricCyan,
+                                        modifier = Modifier.size(18.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column {
-                                        Text(
-                                            text = filter.label,
-                                            fontSize = 11.5.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) AdfElectricCyan else AdfTextPrimary
-                                        )
-                                    }
+                                }
+
+                                // Rotate Right (90 degrees clockwise)
+                                IconButton(
+                                    onClick = {
+                                        if (activePage != null && selectedPageIndex in scannedPages.indices) {
+                                            val newRot = (activePage.rotationDegrees + 90) % 360
+                                            val updated = activePage.copy(rotationDegrees = newRot, id = UUID.randomUUID().toString())
+                                            scannedPages[selectedPageIndex] = updated
+                                            // Instantly reprocess preview in memory
+                                            cachedRawBitmap?.let { raw ->
+                                                previewBitmap = DocumentScanProcessor.processBitmap(
+                                                    source = raw,
+                                                    filter = updated.filter,
+                                                    rotationDegrees = updated.rotationDegrees,
+                                                    filterIntensity = updated.filterIntensity
+                                                )
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.size(36.dp).testTag("rotate_right_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.RotateRight,
+                                        contentDescription = "Rotate Right",
+                                        tint = AdfElectricCyan,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                VerticalDivider(
+                                    modifier = Modifier.height(20.dp),
+                                    color = AdfBorderSubtle
+                                )
+
+                                // Move Left
+                                IconButton(
+                                    onClick = {
+                                        if (selectedPageIndex > 0) {
+                                            val current = scannedPages.removeAt(selectedPageIndex)
+                                            scannedPages.add(selectedPageIndex - 1, current)
+                                            selectedPageIndex -= 1
+                                        }
+                                    },
+                                    enabled = selectedPageIndex > 0,
+                                    modifier = Modifier.size(36.dp).testTag("move_left_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronLeft,
+                                        contentDescription = "Move Left",
+                                        tint = if (selectedPageIndex > 0) AdfTextPrimary else AdfTextMuted,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                // Move Right
+                                IconButton(
+                                    onClick = {
+                                        if (selectedPageIndex < scannedPages.size - 1) {
+                                            val current = scannedPages.removeAt(selectedPageIndex)
+                                            scannedPages.add(selectedPageIndex + 1, current)
+                                            selectedPageIndex += 1
+                                        }
+                                    },
+                                    enabled = selectedPageIndex < scannedPages.size - 1,
+                                    modifier = Modifier.size(36.dp).testTag("move_right_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = "Move Right",
+                                        tint = if (selectedPageIndex < scannedPages.size - 1) AdfTextPrimary else AdfTextMuted,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                VerticalDivider(
+                                    modifier = Modifier.height(20.dp),
+                                    color = AdfBorderSubtle
+                                )
+
+                                // Duplicate Page
+                                IconButton(
+                                    onClick = {
+                                        if (activePage != null) {
+                                            val dup = activePage.copy(id = UUID.randomUUID().toString())
+                                            scannedPages.add(selectedPageIndex + 1, dup)
+                                            selectedPageIndex += 1
+                                            Toast.makeText(context, "Page duplicated", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    modifier = Modifier.size(36.dp).testTag("duplicate_page_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "Duplicate Page",
+                                        tint = AdfElectricCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+
+                                // Delete Active Page
+                                IconButton(
+                                    onClick = {
+                                        if (scannedPages.isNotEmpty()) {
+                                            scannedPages.removeAt(selectedPageIndex)
+                                            if (scannedPages.isEmpty()) {
+                                                isCaptureViewActive = true
+                                            } else {
+                                                selectedPageIndex = selectedPageIndex.coerceIn(0, scannedPages.size - 1)
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.size(36.dp).testTag("scanner_delete_page_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete Page",
+                                        tint = AdfCoral,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    // Multi-page Thumbnail Strip
+                    // ==============================================================
+                    // INTERACTIVE FILTER SELECTION & FINE-TUNING BAR
+                    // ==============================================================
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isLiquidTheme) GlassSurfaceDark else AdfSurfaceCard)
+                            .border(1.dp, AdfBorderSubtle, RoundedCornerShape(12.dp))
+                            .padding(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "ENHANCEMENT FILTER",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                                color = AdfTextSecondary
+                            )
+
+                            Text(
+                                text = "Apply to all (${scannedPages.size})",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AdfElectricCyan,
+                                modifier = Modifier
+                                    .clickable {
+                                        if (activePage != null) {
+                                            val currentF = activePage.filter
+                                            val currentI = activePage.filterIntensity
+                                            for (i in scannedPages.indices) {
+                                                scannedPages[i] = scannedPages[i].copy(filter = currentF, filterIntensity = currentI, id = UUID.randomUUID().toString())
+                                            }
+                                            cachedRawBitmap?.let { raw ->
+                                                previewBitmap = DocumentScanProcessor.processBitmap(
+                                                    source = raw,
+                                                    filter = currentF,
+                                                    rotationDegrees = activePage.rotationDegrees,
+                                                    filterIntensity = currentI
+                                                )
+                                            }
+                                            Toast.makeText(context, "Applied ${currentF.label} to all ${scannedPages.size} pages", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Filter Cards Row with Live Thumbnail Previews
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            itemsIndexed(ScanFilter.entries.toTypedArray()) { _, filterOption ->
+                                val isSelected = activeFilter == filterOption
+                                val thumbBmp = filterThumbnailsMap[filterOption]
+
+                                Surface(
+                                    onClick = {
+                                        if (activePage != null && selectedPageIndex in scannedPages.indices) {
+                                            val updated = activePage.copy(filter = filterOption, id = UUID.randomUUID().toString())
+                                            scannedPages[selectedPageIndex] = updated
+                                            // Instantly reprocess preview in memory
+                                            cachedRawBitmap?.let { raw ->
+                                                previewBitmap = DocumentScanProcessor.processBitmap(
+                                                    source = raw,
+                                                    filter = updated.filter,
+                                                    rotationDegrees = updated.rotationDegrees,
+                                                    filterIntensity = updated.filterIntensity
+                                                )
+                                            }
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isSelected) AdfElectricCyan.copy(alpha = 0.18f) else Color(0x3B1E293B),
+                                    border = BorderStroke(
+                                        width = if (isSelected) 2.dp else 1.dp,
+                                        brush = if (isSelected) Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))
+                                        else Brush.horizontalGradient(listOf(AdfBorderSubtle, AdfBorderSubtle))
+                                    ),
+                                    modifier = Modifier
+                                        .width(96.dp)
+                                        .testTag("filter_chip_${filterOption.name}")
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(6.dp)
+                                    ) {
+                                        // Miniature Filter Thumbnail Preview
+                                        Box(
+                                            modifier = Modifier
+                                                .size(width = 84.dp, height = 50.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(Color.Black),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (thumbBmp != null) {
+                                                Image(
+                                                    bitmap = thumbBmp.asImageBitmap(),
+                                                    contentDescription = filterOption.label,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = filterOption.label.take(2),
+                                                    fontSize = 12.sp,
+                                                    color = AdfTextMuted
+                                                )
+                                            }
+
+                                            if (isSelected) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(16.dp)
+                                                        .align(Alignment.TopEnd)
+                                                        .padding(2.dp)
+                                                        .clip(CircleShape)
+                                                        .background(AdfElectricCyan),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = AdfMidnightBackground,
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        Text(
+                                            text = filterOption.label,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                            color = if (isSelected) AdfElectricCyan else AdfTextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Fine-Tuning Intensity Slider (Visible when active filter is not ORIGINAL)
+                        if (activeFilter != ScanFilter.ORIGINAL && activePage != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Contrast Level: ${(activeIntensity * 100).toInt()}%",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AdfElectricCyan,
+                                    modifier = Modifier.width(115.dp)
+                                )
+
+                                Slider(
+                                    value = activeIntensity,
+                                    onValueChange = { newInt ->
+                                        if (selectedPageIndex in scannedPages.indices) {
+                                            val updated = activePage.copy(filterIntensity = newInt, id = UUID.randomUUID().toString())
+                                            scannedPages[selectedPageIndex] = updated
+                                            cachedRawBitmap?.let { raw ->
+                                                previewBitmap = DocumentScanProcessor.processBitmap(
+                                                    source = raw,
+                                                    filter = updated.filter,
+                                                    rotationDegrees = updated.rotationDegrees,
+                                                    filterIntensity = updated.filterIntensity
+                                                )
+                                            }
+                                        }
+                                    },
+                                    valueRange = 0.4f..2.0f,
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = AdfElectricCyan,
+                                        activeTrackColor = AdfElectricCyan,
+                                        inactiveTrackColor = AdfBorderSubtle
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(28.dp)
+                                        .testTag("filter_intensity_slider")
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // ==============================================================
+                    // MULTI-PAGE THUMBNAIL TRAY
+                    // ==============================================================
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "PAGES (${scannedPages.size})",
+                            text = "PAGE GALLERY (${scannedPages.size})",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
                             color = AdfTextSecondary
                         )
 
                         Text(
-                            text = "Apply filter to all pages",
+                            text = "+ Add More",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = AdfElectricCyan,
                             modifier = Modifier
-                                .clickable {
-                                    val currentFilter = scannedPages.getOrNull(selectedPageIndex)?.filter ?: ScanFilter.MAGIC_COLOR
-                                    for (i in scannedPages.indices) {
-                                        scannedPages[i].filter = currentFilter
-                                    }
-                                    Toast.makeText(context, "Applied ${currentFilter.label} to all ${scannedPages.size} pages", Toast.LENGTH_SHORT).show()
-                                }
-                                .padding(4.dp)
+                                .clickable { isCaptureViewActive = true }
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -755,38 +1162,46 @@ fun DocumentScannerScreen(
                             Surface(
                                 onClick = { selectedPageIndex = index },
                                 shape = RoundedCornerShape(8.dp),
-                                color = AdfSurfaceCard,
+                                color = if (isLiquidTheme) GlassSurfaceDark else AdfSurfaceCard,
                                 border = BorderStroke(
                                     width = if (isCurrent) 2.dp else 1.dp,
                                     color = if (isCurrent) AdfElectricCyan else AdfBorderSubtle
                                 ),
                                 modifier = Modifier
-                                    .size(width = 54.dp, height = 70.dp)
+                                    .size(width = 52.dp, height = 66.dp)
                                     .testTag("page_thumb_$index")
                             ) {
                                 Box(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier.fillMaxSize()
                                 ) {
-                                    Text(
-                                        text = "${index + 1}",
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isCurrent) AdfElectricCyan else AdfTextSecondary
-                                    )
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                            text = "${index + 1}",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isCurrent) AdfElectricCyan else AdfTextSecondary
+                                        )
+                                        Text(
+                                            text = page.filter.label.take(5),
+                                            fontSize = 8.sp,
+                                            color = AdfTextMuted,
+                                            maxLines = 1
+                                        )
+                                    }
                                 }
                             }
                         }
 
-                        // Add More Pages Button
+                        // Add Page Tile
                         item {
                             Surface(
                                 onClick = { isCaptureViewActive = true },
                                 shape = RoundedCornerShape(8.dp),
-                                color = AdfObsidianSurface,
+                                color = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface,
                                 border = BorderStroke(1.dp, Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))),
                                 modifier = Modifier
-                                    .size(width = 54.dp, height = 70.dp)
+                                    .size(width = 52.dp, height = 66.dp)
                                     .testTag("add_page_thumbnail_button")
                             ) {
                                 Column(
@@ -798,7 +1213,7 @@ fun DocumentScannerScreen(
                                         imageVector = Icons.Default.Add,
                                         contentDescription = "Add Page",
                                         tint = AdfElectricCyan,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                     Text(
                                         text = "Add",
@@ -811,9 +1226,80 @@ fun DocumentScannerScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    if (ocrResultsMap.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = AdfElectricCyan.copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, AdfElectricCyan.copy(alpha = 0.3f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showOcrDialog = true }
+                                .testTag("ocr_embedded_badge")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = AdfElectricCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Searchable Text Layer Embedded (${ocrResultsMap.size} ${if (ocrResultsMap.size == 1) "Page" else "Pages"})",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AdfElectricCyan
+                                    )
+                                }
+                                Text(
+                                    text = "Review OCR",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = AdfTextPrimary
+                                )
+                            }
+                        }
+                    }
 
-                    // Final Action: Save as PDF
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Auto-OCR Status Badge
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = AdfElectricCyan.copy(alpha = 0.08f),
+                        border = BorderStroke(1.dp, AdfElectricCyan.copy(alpha = 0.25f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = AdfElectricCyan,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Auto-OCR Active • Generates Searchable Dual-Layer PDF",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AdfElectricCyan
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Final Action: Save as Searchable PDF
                     Button(
                         onClick = {
                             if (scannedPages.isEmpty()) {
@@ -823,11 +1309,19 @@ fun DocumentScannerScreen(
                             isProcessingPdf = true
                             coroutineScope.launch {
                                 try {
+                                    // Automatic OCR Text Extraction & Indexing
+                                    val finalOcrMap = if (ocrResultsMap.isNotEmpty()) {
+                                        ocrResultsMap
+                                    } else {
+                                        DocumentOcrEngine.processPagesOcr(context, scannedPages.toList())
+                                    }
+
                                     val pdfFile = DocumentScanProcessor.generatePdf(
                                         context = context,
                                         pages = scannedPages.toList(),
                                         title = documentTitle,
-                                        pageSizeA4 = true
+                                        pageSizeA4 = true,
+                                        ocrResults = finalOcrMap.ifEmpty { null }
                                     )
                                     viewModel.registerScannedPdf(pdfFile, documentTitle) { savedEntity ->
                                         isProcessingPdf = false
@@ -844,17 +1338,17 @@ fun DocumentScannerScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(50.dp)
+                            .height(48.dp)
                             .testTag("save_scanned_pdf_button")
                     ) {
                         if (isProcessingPdf) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp),
+                                modifier = Modifier.size(20.dp),
                                 color = AdfMidnightBackground,
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Generating High-Res PDF...", color = AdfMidnightBackground, fontWeight = FontWeight.Bold)
+                            Text("OCR Extracting & Compiling Searchable PDF...", color = AdfMidnightBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         } else {
                             Icon(
                                 imageVector = Icons.Default.PictureAsPdf,
@@ -863,10 +1357,10 @@ fun DocumentScannerScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Save as PDF (${scannedPages.size} ${if (scannedPages.size == 1) "Page" else "Pages"})",
+                                text = "Save as Searchable PDF (${scannedPages.size} ${if (scannedPages.size == 1) "Page" else "Pages"})",
                                 color = AdfMidnightBackground,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 14.sp
+                                fontSize = 13.5.sp
                             )
                         }
                     }
@@ -881,7 +1375,7 @@ fun DocumentScannerScreen(
     savedPdfEntity?.let { doc ->
         AlertDialog(
             onDismissRequest = { savedPdfEntity = null },
-            containerColor = AdfSurfaceCard,
+            containerColor = if (isLiquidTheme) GlassSurfaceDark else AdfSurfaceCard,
             shape = RoundedCornerShape(18.dp),
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -914,7 +1408,7 @@ fun DocumentScannerScreen(
                     Spacer(modifier = Modifier.height(10.dp))
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = AdfObsidianSurface,
+                        color = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface,
                         border = CardDefaults.outlinedCardBorder().copy(brush = Brush.horizontalGradient(listOf(AdfBorderSubtle, AdfBorderSubtle))),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -982,6 +1476,161 @@ fun DocumentScannerScreen(
             }
         )
     }
+
+    // ==============================================================
+    // OCR TEXT REVIEW & EDITOR MODAL DIALOG
+    // ==============================================================
+    if (showOcrDialog) {
+        val clipboardManager = LocalClipboardManager.current
+        var dialogSelectedPageIndex by remember { mutableIntStateOf(selectedPageIndex.coerceIn(0, (ocrResultsMap.size - 1).coerceAtLeast(0))) }
+
+        AlertDialog(
+            onDismissRequest = { showOcrDialog = false },
+            containerColor = if (isLiquidTheme) GlassSurfaceDark else AdfSurfaceCard,
+            shape = RoundedCornerShape(18.dp),
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(AdfElectricCyan.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(imageVector = Icons.Default.DocumentScanner, contentDescription = null, tint = AdfElectricCyan)
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "OCR Text Extraction",
+                                color = AdfTextPrimary,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 16.sp
+                            )
+                            Text(
+                                text = "Searchable & Editable Document Layer",
+                                color = AdfTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (ocrResultsMap.size > 1) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 10.dp)
+                        ) {
+                            items(ocrResultsMap.size) { pIdx ->
+                                FilterChip(
+                                    selected = dialogSelectedPageIndex == pIdx,
+                                    onClick = { dialogSelectedPageIndex = pIdx },
+                                    label = { Text("Page ${pIdx + 1}", fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = AdfElectricCyan.copy(alpha = 0.2f),
+                                        selectedLabelColor = AdfElectricCyan
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    val pageText = editedTextMap[dialogSelectedPageIndex] ?: ""
+
+                    OutlinedTextField(
+                        value = pageText,
+                        onValueChange = { newTxt ->
+                            val updated = editedTextMap.toMutableMap()
+                            updated[dialogSelectedPageIndex] = newTxt
+                            editedTextMap = updated
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .testTag("ocr_text_editor_input"),
+                        label = { Text("Extracted Text (Editable)", fontSize = 11.sp, color = AdfElectricCyan) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = AdfTextPrimary,
+                            unfocusedTextColor = AdfTextPrimary,
+                            focusedBorderColor = AdfElectricCyan,
+                            unfocusedBorderColor = AdfBorderSubtle,
+                            focusedContainerColor = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface,
+                            unfocusedContainerColor = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Copy to Clipboard Button
+                        OutlinedButton(
+                            onClick = {
+                                val fullDocText = editedTextMap.entries.sortedBy { it.key }
+                                    .joinToString("\n\n--- Page ---\n\n") { it.value }
+                                clipboardManager.setText(AnnotatedString(fullDocText))
+                                Toast.makeText(context, "Copied OCR text to clipboard", Toast.LENGTH_SHORT).show()
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f).testTag("ocr_copy_clipboard_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Copy Text", fontSize = 11.sp)
+                        }
+
+                        // Export .txt file
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    try {
+                                        val file = DocumentOcrEngine.exportOcrTextToFile(context, ocrResultsMap, documentTitle)
+                                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(intent, "Share OCR Text File"))
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Export Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f).testTag("ocr_export_txt_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Export .txt", fontSize = 11.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showOcrDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = AdfElectricCyan),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("ocr_dialog_confirm_button")
+                ) {
+                    Text("Embed as Dual-Layer PDF", color = AdfMidnightBackground, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -991,7 +1640,7 @@ fun BadgeBox(count: Int, onClick: () -> Unit) {
         shape = CircleShape,
         color = AdfElectricCyan,
         modifier = Modifier
-            .size(50.dp)
+            .size(52.dp)
             .testTag("scanner_review_pages_badge")
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -1012,3 +1661,4 @@ fun BadgeBox(count: Int, onClick: () -> Unit) {
         }
     }
 }
+

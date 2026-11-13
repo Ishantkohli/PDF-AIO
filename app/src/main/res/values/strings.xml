@@ -3,4 +3,11 @@
     <string name="shortcut_scan_long">Scan Document to PDF</string>
     <string name="shortcut_sign_long">Sign PDF Document</string>
     <string name="shortcut_convert_long">Convert Word / Image to PDF</string>
+    <string name="widget_all_in_one_desc">PDF AIO Quick Actions toolbar</string>
+    <string name="widget_scan_desc">Quick Scan Document to PDF</string>
+    <string name="widget_pdf_word_desc">Convert PDF files to Word DOCX</string>
+    <string name="widget_word_pdf_desc">Convert Word DOCX files to PDF</string>
+    <string name="widget_img_pdf_desc">Convert Images to PDF document</string>
+    <string name="widget_pdf_img_desc">Extract Images from PDF document</string>
+    <string name="widget_developer_desc">PDF AIO Developer info &amp; stats</string>
 </resources>
