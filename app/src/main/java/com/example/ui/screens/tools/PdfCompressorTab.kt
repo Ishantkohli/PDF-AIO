@@ -341,7 +341,7 @@ fun PdfCompressorTab(
 
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Custom Resolution Scale: ${String.format("%.2f", customScale)}x",
+                                text = "Custom Resolution Scale: ${String.format(java.util.Locale.US, "%.2f", customScale)}x",
                                 color = AdfElectricCyan,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -583,7 +583,7 @@ fun PdfCompressorTab(
                                     color = AdfEmerald.copy(alpha = 0.2f)
                                 ) {
                                     Text(
-                                        text = "-${String.format("%.1f", result.reductionPercent)}%",
+                                        text = "-${String.format(java.util.Locale.US, "%.1f", result.reductionPercent)}%",
                                         color = AdfEmerald,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.ExtraBold,

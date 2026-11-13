@@ -221,23 +221,14 @@ object DocumentOcrEngine {
             }
         }
 
-        val density = if (totalCount > 0) darkCount.toFloat() / totalCount else 0f
+        val densityPct = ((if (totalCount > 0) darkCount.toFloat() / totalCount else 0f) * 100f).toInt().coerceIn(0, 100)
+        val bandStartPct = ((startY.toFloat() / height.coerceAtLeast(1)) * 100f).toInt().coerceIn(0, 100)
+        val bandEndPct = ((endY.toFloat() / height.coerceAtLeast(1)) * 100f).toInt().coerceIn(bandStartPct, 100)
 
-        // Document pattern recognition mapping
-        return when {
-            lineIdx == 0 -> {
-                if (density > 0.15f) "MUTUAL NON-DISCLOSURE & SERVICE AGREEMENT" else "DOCUMENT RECORD & RECEIPT"
-            }
-            lineIdx == 1 -> "Document ID: SCAN-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(Date())} • Verified"
-            lineIdx == 2 -> "1. PURPOSE & SCOPE OF DISCLOSURE"
-            lineIdx == 3 -> "This agreement governs confidential information disclosed between the parties."
-            lineIdx == 4 -> "2. OBLIGATIONS & RESTRICTIONS"
-            lineIdx == 5 -> "Receiving party agrees to maintain strict security protocols for all data."
-            lineIdx == 6 -> "3. TERM, DURATION & GOVERNING LAW"
-            lineIdx == 7 -> "This contract remains binding for a period of two (2) years from execution."
-            lineIdx == 8 -> "INVOICE TOTAL / VALUE: $349.00 USD [PAID IN FULL]"
-            lineIdx == 9 -> "Authorized Signature: [Digitally Stamped & Verified]"
-            else -> "Section ${lineIdx + 1}: Paragraph content and operational clause details."
+        return if (lineIdx == 0 && totalLines == 1) {
+            "[Full-Page Scan Region: 0%–100% • Ink Density $densityPct% • Tap to type or refine transcript]"
+        } else {
+            "[Line ${lineIdx + 1}/$totalLines • Vertical Band $bandStartPct%–$bandEndPct% • Ink Density $densityPct%]"
         }
     }
 
@@ -301,7 +292,7 @@ object DocumentOcrEngine {
 
         val sb = StringBuilder()
         sb.append("=========================================\n")
-        sb.append("PDF AIO OCR EXTRACTED TEXT RECORD\n")
+        sb.append("PDF (AIO) OCR EXTRACTED TEXT RECORD\n")
         sb.append("Document: $docTitle\n")
         sb.append("Date: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}\n")
         sb.append("Total Pages: ${ocrResults.size}\n")

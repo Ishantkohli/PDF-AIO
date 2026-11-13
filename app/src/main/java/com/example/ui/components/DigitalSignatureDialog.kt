@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -91,7 +92,9 @@ fun DigitalSignatureDialog(
 
     // Placement & Target page states
     var targetPage by remember { mutableIntStateOf(currentPageIndex.coerceIn(0, (totalPages - 1).coerceAtLeast(0))) }
-    var placementPreset by remember { mutableStateOf("BOTTOM_RIGHT") } // BOTTOM_RIGHT, BOTTOM_LEFT, CENTER, TOP_RIGHT
+    var placementPreset by remember { mutableStateOf("BOTTOM_RIGHT") } // BOTTOM_RIGHT, BOTTOM_LEFT, CENTER, TOP_RIGHT, CUSTOM
+    var customPosX by remember { mutableFloatStateOf(0.60f) }
+    var customPosY by remember { mutableFloatStateOf(0.80f) }
     var saveToVault by remember { mutableStateOf(true) }
     var selectedSavedSignature by remember { mutableStateOf<SignatureEntity?>(null) }
 
@@ -579,11 +582,13 @@ fun DigitalSignatureDialog(
                                             ) {
                                                 val isTyped = sig.pathsJson.contains("TYPED")
                                                 if (isTyped) {
-                                                    val previewText = try {
-                                                        JSONObject(sig.pathsJson).optString("text", sig.title)
-                                                    } catch (e: Exception) {
-                                                        sig.title
-                                                    }
+                                                    var previewText = sig.title
+                                                    var previewColorHex = 0xFF1E3A8AL
+                                                    try {
+                                                        val obj = JSONObject(sig.pathsJson)
+                                                        previewText = obj.optString("text", sig.title)
+                                                        previewColorHex = obj.optLong("colorHex", 0xFF1E3A8AL) and 0xFFFFFFFFL
+                                                    } catch (_: Exception) {}
                                                     Box(contentAlignment = Alignment.Center) {
                                                         Text(
                                                             text = previewText,
@@ -591,7 +596,7 @@ fun DigitalSignatureDialog(
                                                             fontStyle = FontStyle.Italic,
                                                             fontWeight = FontWeight.Bold,
                                                             fontFamily = FontFamily.Cursive,
-                                                            color = Color(0xFF1E3A8A),
+                                                            color = Color(previewColorHex),
                                                             maxLines = 1
                                                         )
                                                     }
@@ -755,27 +760,46 @@ fun DigitalSignatureDialog(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            // Placement Position Presets
-                            Text(
-                                text = "Position on Page",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = AdfTextSecondary
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
+                            // Placement Position Presets + Free Page Placement Pad
                             Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Position on Page (Tap or Drag Anywhere)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AdfTextSecondary
+                                )
+                                Text(
+                                    text = "X ${(customPosX * 100).toInt()}% • Y ${(customPosY * 100).toInt()}%",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = AdfElectricCyan
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LazyRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                listOf(
-                                    "BOTTOM_RIGHT" to "Bottom Right",
-                                    "BOTTOM_LEFT" to "Bottom Left",
-                                    "CENTER" to "Center",
-                                    "TOP_RIGHT" to "Top Right"
-                                ).forEach { (key, label) ->
+                                val presets = listOf(
+                                    Triple("CUSTOM", "Free Place", customPosX to customPosY),
+                                    Triple("BOTTOM_RIGHT", "Bottom Right", 0.60f to 0.80f),
+                                    Triple("BOTTOM_LEFT", "Bottom Left", 0.08f to 0.80f),
+                                    Triple("CENTER", "Center", 0.35f to 0.45f),
+                                    Triple("TOP_RIGHT", "Top Right", 0.60f to 0.12f)
+                                )
+                                items(presets) { (key, label, coords) ->
                                     val isSelected = placementPreset == key
                                     FilterChip(
                                         selected = isSelected,
-                                        onClick = { placementPreset = key },
+                                        onClick = {
+                                            placementPreset = key
+                                            if (key != "CUSTOM") {
+                                                customPosX = coords.first
+                                                customPosY = coords.second
+                                            }
+                                        },
                                         label = { Text(label, fontSize = 11.sp) },
                                         colors = FilterChipDefaults.filterChipColors(
                                             selectedContainerColor = AdfElectricCyan,
@@ -791,6 +815,94 @@ fun DigitalSignatureDialog(
                                     )
                                 }
                             }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Interactive Full-Page Placement Map
+                            var pagePreviewSize by remember { mutableStateOf(IntSize(1, 1)) }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(175.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .aspectRatio(0.72f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFFF8FAFC))
+                                        .border(1.5.dp, AdfElectricCyan.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                                        .onSizeChanged { pagePreviewSize = it }
+                                        .pointerInput(Unit) {
+                                            detectTapGestures { tap ->
+                                                if (pagePreviewSize.width > 0 && pagePreviewSize.height > 0) {
+                                                    customPosX = ((tap.x / pagePreviewSize.width) - 0.14f).coerceIn(0.02f, 0.72f)
+                                                    customPosY = ((tap.y / pagePreviewSize.height) - 0.05f).coerceIn(0.04f, 0.88f)
+                                                    placementPreset = "CUSTOM"
+                                                }
+                                            }
+                                        }
+                                        .pointerInput(Unit) {
+                                            detectDragGestures { change, _ ->
+                                                change.consume()
+                                                if (pagePreviewSize.width > 0 && pagePreviewSize.height > 0) {
+                                                    customPosX = ((change.position.x / pagePreviewSize.width) - 0.14f).coerceIn(0.02f, 0.72f)
+                                                    customPosY = ((change.position.y / pagePreviewSize.height) - 0.05f).coerceIn(0.04f, 0.88f)
+                                                    placementPreset = "CUSTOM"
+                                                }
+                                            }
+                                        }
+                                        .testTag("signature_page_placement_pad")
+                                ) {
+                                    // Subtle simulated page text lines for orientation
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(14.dp)
+                                    ) {
+                                        repeat(7) { idx ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(if (idx % 3 == 2) 0.55f else 0.9f)
+                                                    .height(4.dp)
+                                                    .clip(RoundedCornerShape(2.dp))
+                                                    .background(Color(0xFFE2E8F0))
+                                            )
+                                        }
+                                    }
+
+                                    // Draggable Signature Position Pill on Page
+                                    val density = androidx.compose.ui.platform.LocalDensity.current
+                                    val markerX = with(density) { (customPosX * pagePreviewSize.width).toDp() }
+                                    val markerY = with(density) { (customPosY * pagePreviewSize.height).toDp() }
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = selectedInkColor.color.copy(alpha = 0.18f),
+                                        border = androidx.compose.foundation.BorderStroke(1.5.dp, selectedInkColor.color),
+                                        modifier = Modifier
+                                            .offset(x = markerX, y = markerY)
+                                            .width(44.dp)
+                                            .height(18.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = "SIGN",
+                                                color = selectedInkColor.color,
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Tip: After stamping, you can also drag & resize your signature anywhere on the page.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AdfTextMuted
+                            )
                         }
                     }
 
@@ -837,13 +949,8 @@ fun DigitalSignatureDialog(
 
                     Button(
                         onClick = {
-                            val (posX, posY) = when (placementPreset) {
-                                "BOTTOM_RIGHT" -> 0.60f to 0.82f
-                                "BOTTOM_LEFT" -> 0.12f to 0.82f
-                                "CENTER" -> 0.35f to 0.50f
-                                "TOP_RIGHT" -> 0.60f to 0.15f
-                                else -> 0.60f to 0.82f
-                            }
+                            val posX = customPosX.coerceIn(0.02f, 0.85f)
+                            val posY = customPosY.coerceIn(0.04f, 0.94f)
 
                             when (mode) {
                                 SignatureMode.TYPE -> {
@@ -893,9 +1000,12 @@ fun DigitalSignatureDialog(
                                     val sig = selectedSavedSignature
                                     if (sig != null) {
                                         val isTyped = sig.pathsJson.contains("TYPED")
+                                        var resolvedColorHex = selectedInkColor.hex
                                         val text = if (isTyped) {
                                             try {
-                                                JSONObject(sig.pathsJson).optString("text", sig.title)
+                                                val obj = JSONObject(sig.pathsJson)
+                                                resolvedColorHex = obj.optLong("colorHex", selectedInkColor.hex) and 0xFFFFFFFFL
+                                                obj.optString("text", sig.title)
                                             } catch (e: Exception) {
                                                 sig.title
                                             }
@@ -906,7 +1016,7 @@ fun DigitalSignatureDialog(
                                             isTyped = isTyped,
                                             typedText = text,
                                             strokePathsJson = if (isTyped) "" else sig.pathsJson,
-                                            colorHex = selectedInkColor.hex,
+                                            colorHex = resolvedColorHex,
                                             posX = posX,
                                             posY = posY,
                                             saveToVault = false

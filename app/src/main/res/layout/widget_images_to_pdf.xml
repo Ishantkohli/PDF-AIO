@@ -10,26 +10,46 @@
     android:clickable="true"
     android:focusable="true">
 
-    <ImageView
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:src="@android:drawable/ic_menu_gallery"
-        android:tint="#CBA6F7" />
+    <FrameLayout
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:background="@drawable/widget_badge_violet"
+        android:padding="10dp">
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:src="@drawable/ic_widget_images_to_pdf"
+            android:contentDescription="Images to PDF" />
+    </FrameLayout>
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Images to PDF"
-        android:textColor="#FFFFFF"
-        android:textSize="13sp"
+        android:text="Images → PDF"
+        android:textColor="#F8FAFC"
+        android:textSize="13.5sp"
         android:textStyle="bold"
+        android:maxLines="1"
         android:layout_marginTop="8dp" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Batch Image Creator"
-        android:textColor="#A6ADC8"
+        android:text="Merge Photos to PDF"
+        android:textColor="#94A3B8"
         android:textSize="10sp"
+        android:maxLines="1"
         android:layout_marginTop="2dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/widget_tile_glass_bg"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="3dp"
+        android:layout_marginTop="8dp"
+        android:text="Select Photos"
+        android:textColor="#C084FC"
+        android:textSize="9.5sp"
+        android:textStyle="bold" />
 </LinearLayout>

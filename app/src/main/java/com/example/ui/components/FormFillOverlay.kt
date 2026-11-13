@@ -19,9 +19,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
@@ -55,6 +58,8 @@ fun FormFillOverlay(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
+    var overlaySizePx by remember { mutableStateOf(IntSize.Zero) }
     var activeTool by remember { mutableStateOf(FormFieldType.TEXT_INPUT) }
     val placedFields = remember { mutableStateListOf<PlacedFormField>() }
     var selectedFieldForInput by remember { mutableStateOf<PlacedFormField?>(null) }
@@ -65,10 +70,13 @@ fun FormFillOverlay(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .onSizeChanged { overlaySizePx = it }
             .pointerInput(activeTool) {
                 detectTapGestures { offset ->
-                    val xRatio = offset.x / size.width
-                    val yRatio = offset.y / size.height
+                    val w = size.width.coerceAtLeast(1)
+                    val h = size.height.coerceAtLeast(1)
+                    val xRatio = (offset.x / w).coerceIn(0f, 0.92f)
+                    val yRatio = (offset.y / h).coerceIn(0f, 0.92f)
 
                     val defaultValue = when (activeTool) {
                         FormFieldType.TEXT_INPUT -> "Tap to edit"
@@ -97,6 +105,8 @@ fun FormFillOverlay(
                 modifier = Modifier
                     .fillMaxSize()
             ) {
+                val offsetX = if (overlaySizePx.width > 0) with(density) { (field.xRatio * overlaySizePx.width).toDp() } else 0.dp
+                val offsetY = if (overlaySizePx.height > 0) with(density) { (field.yRatio * overlaySizePx.height).toDp() } else 0.dp
                 Surface(
                     shape = RoundedCornerShape(6.dp),
                     color = AdfMidnightSurface.copy(alpha = 0.9f),
@@ -105,8 +115,8 @@ fun FormFillOverlay(
                     ),
                     modifier = Modifier
                         .offset(
-                            x = (field.xRatio * 320).dp,
-                            y = (field.yRatio * 500).dp
+                            x = offsetX,
+                            y = offsetY
                         )
                         .clickable {
                             if (field.type == FormFieldType.CHECKBOX) {

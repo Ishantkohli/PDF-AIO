@@ -170,7 +170,7 @@ fun AppUpdateAlertDialog(
                 }
 
                 if (releaseInfo.apkSize > 0) {
-                    val sizeMb = String.format("%.1f MB", releaseInfo.apkSize / (1024.0 * 1024.0))
+                    val sizeMb = String.format(java.util.Locale.US, "%.1f MB", releaseInfo.apkSize / (1024.0 * 1024.0))
                     Text(
                         text = "Download Size: $sizeMb",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),

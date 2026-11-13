@@ -41,7 +41,7 @@ import com.example.ui.PdfViewModel
 import com.example.ui.theme.*
 
 /**
- * Support & Donate Screen for PDF AIO app.
+ * Support & Donate Screen for PDF (AIO) app.
  * Placed directly between Signature and Developer navigation tabs.
  * Allows users to support the developer via UPI finance apps (Paytm, FamPay, PhonePe, Google Pay, BHIM, etc.).
  */
@@ -91,7 +91,7 @@ fun SupportDonateScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Keep PDF AIO 100% free & updated",
+                                text = "Keep PDF (AIO) 100% free & updated",
                                 color = AdfTextSecondary,
                                 fontSize = 11.sp
                             )
@@ -262,7 +262,7 @@ fun SupportDonateScreen(
                         Button(
                             onClick = {
                                 try {
-                                    val upiUri = Uri.parse("upi://pay?pa=$upiId&pn=Ishant%20Kohli&cu=INR&tn=Support%20PDF%20AIO")
+                                    val upiUri = Uri.parse("upi://pay?pa=$upiId&pn=Ishant%20Kohli&cu=INR&tn=${Uri.encode("Support PDF (AIO)")}")
                                     val intent = Intent(Intent.ACTION_VIEW, upiUri)
                                     val chooser = Intent.createChooser(intent, "Select Finance / Payment App")
                                     chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

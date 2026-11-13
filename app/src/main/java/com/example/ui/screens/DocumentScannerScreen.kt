@@ -95,6 +95,18 @@ fun DocumentScannerScreen(
     var editedTextMap by remember { mutableStateOf<MutableMap<Int, String>>(mutableMapOf()) }
 
     var tempCameraImageUri by remember { mutableStateOf<Uri?>(null) }
+    val trackedTempFiles = remember { mutableListOf<File>() }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            trackedTempFiles.forEach { file ->
+                try {
+                    if (file.exists()) file.delete()
+                } catch (_: Exception) {}
+            }
+            trackedTempFiles.clear()
+        }
+    }
 
     // Creates a temporary file in cache for full-resolution camera captures
     fun createTempImageUri(): Uri {
@@ -103,6 +115,7 @@ fun DocumentScannerScreen(
             ".jpg",
             context.cacheDir
         ).apply { createNewFile() }
+        trackedTempFiles.add(tempFile)
         return FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
@@ -191,7 +204,7 @@ fun DocumentScannerScreen(
             p.textSize = 28f
             p.isFakeBoldText = false
             p.color = AndroidColor.GRAY
-            c.drawText("PDF AIO Document Scanner • 100% On-Device Engine", 80f, 210f, p)
+            c.drawText("PDF (AIO) Document Scanner • 100% On-Device Engine", 80f, 210f, p)
             c.drawLine(80f, 240f, 1120f, 240f, p)
 
             // Body text lines
@@ -211,7 +224,7 @@ fun DocumentScannerScreen(
                     "4. GOVERNING LAW: This document constitutes a binding agreement.",
                     "",
                     "Authorized Signatures:",
-                    "[Digital Stamp Verified • 100% On-Device ADF Protocol]"
+                    "[Digital Stamp Verified • 100% On-Device Local Protocol]"
                 )
             } else {
                 listOf(
@@ -220,7 +233,7 @@ fun DocumentScannerScreen(
                     "",
                     "ITEM DESCRIPTION                     QTY    RATE      AMOUNT",
                     "-------------------------------------------------------------",
-                    "PDF AIO Pro Document Suite License    1     $199.00   $199.00",
+                    "PDF (AIO) Pro Document Suite License  1     $199.00   $199.00",
                     "Hardware Refresh Rate Accelerator     1     $49.00    $49.00",
                     "Offline Digital Signature Vault       1     $79.00    $79.00",
                     "-------------------------------------------------------------",
@@ -241,6 +254,8 @@ fun DocumentScannerScreen(
             FileOutputStream(sampleFile).use { out ->
                 bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
+            bmp.recycle()
+            trackedTempFiles.add(sampleFile)
 
             val page = ScannedPage(
                 sourceUri = Uri.fromFile(sampleFile),
@@ -275,25 +290,27 @@ fun DocumentScannerScreen(
         scannedPages.size
     ) {
         if (!isCaptureViewActive && activePage != null) {
-            withContext(Dispatchers.IO) {
-                var raw = cachedRawBitmap
-                if (raw == null || cachedUri != activePage.sourceUri) {
-                    raw = DocumentScanProcessor.loadBitmapFromUri(context, activePage.sourceUri)
-                    cachedRawBitmap = raw
+            val loadedRaw = if (cachedRawBitmap != null && cachedUri == activePage.sourceUri) {
+                cachedRawBitmap
+            } else {
+                withContext(Dispatchers.IO) {
+                    DocumentScanProcessor.loadBitmapFromUri(context, activePage.sourceUri)
+                }?.also {
+                    cachedRawBitmap = it
                     cachedUri = activePage.sourceUri
                 }
+            }
 
-                if (raw != null) {
-                    val processed = DocumentScanProcessor.processBitmap(
-                        source = raw,
+            if (loadedRaw != null) {
+                val processed = withContext(Dispatchers.Default) {
+                    DocumentScanProcessor.processBitmap(
+                        source = loadedRaw,
                         filter = activeFilter,
                         rotationDegrees = activeRotation,
                         filterIntensity = activeIntensity
                     )
-                    withContext(Dispatchers.Main) {
-                        previewBitmap = processed
-                    }
                 }
+                previewBitmap = processed
             }
         }
     }
@@ -726,13 +743,12 @@ fun DocumentScannerScreen(
                                     contentScale = ContentScale.Fit
                                 )
 
-                                // Interactive Crop Boundary Overlay lines
+                                // Interactive Crop Boundary Overlay lines + Apply Auto-Trim Button
                                 if (isCropOverlayActive) {
                                     Canvas(modifier = Modifier.fillMaxSize()) {
                                         val w = size.width
                                         val h = size.height
                                         val pad = 24f
-                                        val cornerRadius = 16f
                                         val strokeWidth = 4f
                                         val lineCol = AdfElectricCyan
 
@@ -754,6 +770,50 @@ fun DocumentScannerScreen(
                                         drawCircle(handleColor, handleR, androidx.compose.ui.geometry.Offset(w - pad, pad))
                                         drawCircle(handleColor, handleR, androidx.compose.ui.geometry.Offset(pad, h - pad))
                                         drawCircle(handleColor, handleR, androidx.compose.ui.geometry.Offset(w - pad, h - pad))
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            val pageToCrop = activePage ?: return@Button
+                                            val idx = selectedPageIndex
+                                            if (idx !in scannedPages.indices) return@Button
+                                            coroutineScope.launch {
+                                                val croppedUri = withContext(Dispatchers.IO) {
+                                                    val raw = DocumentScanProcessor.loadBitmapFromUri(context, pageToCrop.sourceUri)
+                                                        ?: return@withContext null
+                                                    val trimmed = DocumentScanProcessor.trimPageMargins(raw, 0.06f)
+                                                    if (trimmed !== raw && !raw.isRecycled) raw.recycle()
+                                                    val outFile = File(context.cacheDir, "scan_crop_${System.currentTimeMillis()}.jpg")
+                                                    FileOutputStream(outFile).use { out ->
+                                                        trimmed.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                                                    }
+                                                    trimmed.recycle()
+                                                    trackedTempFiles.add(outFile)
+                                                    Uri.fromFile(outFile)
+                                                }
+                                                if (croppedUri != null) {
+                                                    cachedRawBitmap = null
+                                                    cachedUri = null
+                                                    scannedPages[idx] = pageToCrop.copy(
+                                                        sourceUri = croppedUri,
+                                                        id = UUID.randomUUID().toString()
+                                                    )
+                                                    isCropOverlayActive = false
+                                                    Toast.makeText(context, "Margins trimmed cleanly", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = AdfCoral),
+                                        shape = RoundedCornerShape(18.dp),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                        modifier = Modifier
+                                            .align(Alignment.TopCenter)
+                                            .padding(top = 12.dp)
+                                            .testTag("scanner_apply_crop_button")
+                                    ) {
+                                        Icon(Icons.Default.Crop, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Apply Margin Crop", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -780,17 +840,10 @@ fun DocumentScannerScreen(
                                     onClick = {
                                         if (activePage != null && selectedPageIndex in scannedPages.indices) {
                                             val newRot = (activePage.rotationDegrees + 270) % 360
-                                            val updated = activePage.copy(rotationDegrees = newRot, id = UUID.randomUUID().toString())
-                                            scannedPages[selectedPageIndex] = updated
-                                            // Instantly reprocess preview in memory
-                                            cachedRawBitmap?.let { raw ->
-                                                previewBitmap = DocumentScanProcessor.processBitmap(
-                                                    source = raw,
-                                                    filter = updated.filter,
-                                                    rotationDegrees = updated.rotationDegrees,
-                                                    filterIntensity = updated.filterIntensity
-                                                )
-                                            }
+                                            scannedPages[selectedPageIndex] = activePage.copy(
+                                                rotationDegrees = newRot,
+                                                id = UUID.randomUUID().toString()
+                                            )
                                         }
                                     },
                                     modifier = Modifier.size(36.dp).testTag("rotate_left_button")
@@ -808,17 +861,10 @@ fun DocumentScannerScreen(
                                     onClick = {
                                         if (activePage != null && selectedPageIndex in scannedPages.indices) {
                                             val newRot = (activePage.rotationDegrees + 90) % 360
-                                            val updated = activePage.copy(rotationDegrees = newRot, id = UUID.randomUUID().toString())
-                                            scannedPages[selectedPageIndex] = updated
-                                            // Instantly reprocess preview in memory
-                                            cachedRawBitmap?.let { raw ->
-                                                previewBitmap = DocumentScanProcessor.processBitmap(
-                                                    source = raw,
-                                                    filter = updated.filter,
-                                                    rotationDegrees = updated.rotationDegrees,
-                                                    filterIntensity = updated.filterIntensity
-                                                )
-                                            }
+                                            scannedPages[selectedPageIndex] = activePage.copy(
+                                                rotationDegrees = newRot,
+                                                id = UUID.randomUUID().toString()
+                                            )
                                         }
                                     },
                                     modifier = Modifier.size(36.dp).testTag("rotate_right_button")
@@ -961,14 +1007,10 @@ fun DocumentScannerScreen(
                                             val currentF = activePage.filter
                                             val currentI = activePage.filterIntensity
                                             for (i in scannedPages.indices) {
-                                                scannedPages[i] = scannedPages[i].copy(filter = currentF, filterIntensity = currentI, id = UUID.randomUUID().toString())
-                                            }
-                                            cachedRawBitmap?.let { raw ->
-                                                previewBitmap = DocumentScanProcessor.processBitmap(
-                                                    source = raw,
+                                                scannedPages[i] = scannedPages[i].copy(
                                                     filter = currentF,
-                                                    rotationDegrees = activePage.rotationDegrees,
-                                                    filterIntensity = currentI
+                                                    filterIntensity = currentI,
+                                                    id = UUID.randomUUID().toString()
                                                 )
                                             }
                                             Toast.makeText(context, "Applied ${currentF.label} to all ${scannedPages.size} pages", Toast.LENGTH_SHORT).show()
@@ -992,17 +1034,10 @@ fun DocumentScannerScreen(
                                 Surface(
                                     onClick = {
                                         if (activePage != null && selectedPageIndex in scannedPages.indices) {
-                                            val updated = activePage.copy(filter = filterOption, id = UUID.randomUUID().toString())
-                                            scannedPages[selectedPageIndex] = updated
-                                            // Instantly reprocess preview in memory
-                                            cachedRawBitmap?.let { raw ->
-                                                previewBitmap = DocumentScanProcessor.processBitmap(
-                                                    source = raw,
-                                                    filter = updated.filter,
-                                                    rotationDegrees = updated.rotationDegrees,
-                                                    filterIntensity = updated.filterIntensity
-                                                )
-                                            }
+                                            scannedPages[selectedPageIndex] = activePage.copy(
+                                                filter = filterOption,
+                                                id = UUID.randomUUID().toString()
+                                            )
                                         }
                                     },
                                     shape = RoundedCornerShape(10.dp),
@@ -1097,16 +1132,10 @@ fun DocumentScannerScreen(
                                     value = activeIntensity,
                                     onValueChange = { newInt ->
                                         if (selectedPageIndex in scannedPages.indices) {
-                                            val updated = activePage.copy(filterIntensity = newInt, id = UUID.randomUUID().toString())
-                                            scannedPages[selectedPageIndex] = updated
-                                            cachedRawBitmap?.let { raw ->
-                                                previewBitmap = DocumentScanProcessor.processBitmap(
-                                                    source = raw,
-                                                    filter = updated.filter,
-                                                    rotationDegrees = updated.rotationDegrees,
-                                                    filterIntensity = updated.filterIntensity
-                                                )
-                                            }
+                                            scannedPages[selectedPageIndex] = activePage.copy(
+                                                filterIntensity = newInt,
+                                                id = UUID.randomUUID().toString()
+                                            )
                                         }
                                     },
                                     valueRange = 0.4f..2.0f,
@@ -1321,7 +1350,8 @@ fun DocumentScannerScreen(
                                         pages = scannedPages.toList(),
                                         title = documentTitle,
                                         pageSizeA4 = true,
-                                        ocrResults = finalOcrMap.ifEmpty { null }
+                                        ocrResults = finalOcrMap.ifEmpty { null },
+                                        ocrTextOverrides = editedTextMap.takeIf { it.isNotEmpty() }
                                     )
                                     viewModel.registerScannedPdf(pdfFile, documentTitle) { savedEntity ->
                                         isProcessingPdf = false
@@ -1400,7 +1430,7 @@ fun DocumentScannerScreen(
             text = {
                 Column {
                     Text(
-                        text = "Your document has been compiled into a high-resolution PDF and added to your PDF AIO library.",
+                        text = "Your document has been compiled into a high-resolution PDF and added to your PDF (AIO) library.",
                         color = AdfTextSecondary,
                         fontSize = 13.sp,
                         lineHeight = 18.sp

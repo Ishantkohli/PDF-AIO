@@ -15,7 +15,7 @@ import android.util.Log
 class UpdateCleanReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
-            Log.d("UpdateCleanReceiver", "PDF AIO package replaced/updated! Automatically deleting update APKs...")
+            Log.d("UpdateCleanReceiver", "PDF (AIO) package replaced/updated! Automatically deleting update APKs...")
             UpdateManager.cleanCachedApks(context)
         }
     }

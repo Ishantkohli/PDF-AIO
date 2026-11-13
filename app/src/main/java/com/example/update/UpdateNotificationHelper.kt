@@ -1,20 +1,23 @@
 package com.example.update
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
 
 /**
  * Handles posting official Android system notifications when a new version
- * of PDF AIO is published on GitHub.
+ * of PDF (AIO) is published on GitHub.
  */
 object UpdateNotificationHelper {
 
@@ -27,8 +30,8 @@ object UpdateNotificationHelper {
      */
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "PDF AIO App Updates"
-            val descriptionText = "Notifications when a new version of PDF AIO is available to download"
+            val name = "PDF (AIO) App Updates"
+            val descriptionText = "Notifications when a new version of PDF (AIO) is available to download"
             val importance = NotificationManager.IMPORTANCE_HIGH
             val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
                 description = descriptionText
@@ -76,19 +79,26 @@ object UpdateNotificationHelper {
 
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.pdf_aio_logo)
-                .setContentTitle("PDF AIO ( By Ishant)")
-                .setContentText("Hey User, a New Update is availble to download..\nPress on Notification To Update it..")
+                .setContentTitle("PDF (AIO) (By Ishant)")
+                .setContentText("Hey User, a new update is available to download. Tap to update now.")
                 .setStyle(
                     NotificationCompat.BigTextStyle()
-                        .setBigContentTitle("PDF AIO ( By Ishant)")
+                        .setBigContentTitle("PDF (AIO) (By Ishant)")
                         .bigText(
-                            "Hey User, a New Update is availble to download..\nPress on Notification To Update it..\n\nNew Version: v${releaseInfo.versionName}\nNotes: ${releaseInfo.releaseTitle}"
+                            "Hey User, a new update is available to download.\nTap this notification to update.\n\nNew Version: v${releaseInfo.versionName}\nNotes: ${releaseInfo.releaseTitle}"
                         )
                 )
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.w(TAG, "Skipping update notification: POST_NOTIFICATIONS permission not granted")
+                return
+            }
 
             val notificationManager = NotificationManagerCompat.from(context)
             notificationManager.notify(NOTIFICATION_ID, builder.build())

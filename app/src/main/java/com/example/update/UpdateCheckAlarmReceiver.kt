@@ -34,8 +34,9 @@ class UpdateCheckAlarmReceiver : BroadcastReceiver() {
             } catch (e: Exception) {
                 Log.e("UpdateAlarmReceiver", "Error in background update check: ${e.message}", e)
             } finally {
-                // Schedule next alarm in 8 hours
-                scheduleNextAlarm(context)
+                if (action == Intent.ACTION_BOOT_COMPLETED) {
+                    scheduleNextAlarm(context)
+                }
                 pendingResult.finish()
             }
         }

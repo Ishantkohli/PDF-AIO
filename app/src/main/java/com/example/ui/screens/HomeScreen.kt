@@ -63,7 +63,7 @@ import java.util.Locale
 private val unifiedDocDateFormat = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
 
 /**
- * Unified representation of a document for ADF AIO home list
+ * Unified representation of a document for PDF (AIO) home list
  */
 data class UnifiedDocItem(
     val id: String,
@@ -288,10 +288,6 @@ fun HomeScreen(
 
             val typeBadge = when (doc.fileType) {
                 DeviceFileType.PDF -> "pdf"
-                DeviceFileType.WORD_DOCX -> "docx"
-                DeviceFileType.WORD_DOC -> "doc"
-                DeviceFileType.EXCEL -> "xlsx"
-                DeviceFileType.POWERPOINT -> "pptx"
                 DeviceFileType.TEXT -> "txt"
                 else -> "file"
             }
@@ -339,7 +335,7 @@ fun HomeScreen(
                         ) {
                             Image(
                                 painter = painterResource(id = R.drawable.pdf_aio_logo),
-                                contentDescription = "PDF AIO Emblem",
+                                contentDescription = "PDF (AIO) Emblem",
                                 modifier = Modifier.size(26.dp)
                             )
                         }
@@ -347,7 +343,7 @@ fun HomeScreen(
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "PDF AIO",
+                                    text = "PDF (AIO)",
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
                                     color = AdfTextPrimary
                                 )
@@ -438,8 +434,6 @@ fun HomeScreen(
                         documentPickerLauncher.launch(
                             arrayOf(
                                 "application/pdf",
-                                "application/msword",
-                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                 "text/plain"
                             )
                         )
@@ -519,7 +513,7 @@ fun HomeScreen(
                                         color = AdfTextPrimary
                                     )
                                     Text(
-                                        text = "Allow All Files Access to discover all PDFs, Word & office files",
+                                        text = "Allow All Files Access to discover all PDF and TXT files across storage",
                                         fontSize = 11.sp,
                                         color = AdfTextSecondary
                                     )
@@ -619,7 +613,7 @@ fun HomeScreen(
                             onValueChange = { searchQuery = it },
                             placeholder = {
                                 Text(
-                                    text = "Search by filename or extension (.pdf, .docx, report)...",
+                                    text = "Search PDF or TXT files (.pdf, .txt, name)...",
                                     color = AdfTextMuted,
                                     fontSize = 13.sp,
                                     maxLines = 1,
@@ -655,7 +649,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         // Category & Extension Quick Filter Pills
-                        val filterCategories = listOf("All Files", "PDFs Only", "Word (.docx)", "Starred ⭐")
+                        val filterCategories = listOf("All Files", "PDFs Only", "TXT Files", "Starred ⭐")
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -685,7 +679,7 @@ fun HomeScreen(
 
                         // Quick Extension Filter Chips
                         Spacer(modifier = Modifier.height(8.dp))
-                        val extensionFilters = listOf(".pdf", ".docx", ".doc", ".txt", ".xlsx")
+                        val extensionFilters = listOf(".pdf", ".txt")
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -849,8 +843,12 @@ fun HomeScreen(
                                 }
                             },
                             onConvertToOther = {
-                                viewModel.setSelectedToolTab(if (item.isPdf) 3 else 2)
-                                viewModel.navigateTo(AppScreen.TOOLS)
+                                if (!item.isPdf && item.deviceFile != null) {
+                                    viewModel.convertTxtUriToPdf(item.deviceFile.uri, item.title) {}
+                                } else {
+                                    viewModel.setSelectedToolTab(3)
+                                    viewModel.navigateTo(AppScreen.TOOLS)
+                                }
                             },
                             onToggleFavorite = {
                                 if (item.originalDoc != null) {
@@ -896,7 +894,7 @@ fun HomeScreen(
             },
             text = {
                 Text(
-                    text = "To scan and display all PDF, Word (.docx), Excel, and text files stored across your entire internal storage and SD cards, PDF AIO needs All Files Access permission in Android Settings.\n\nYou can also select any specific folder via Storage Access Framework (one-time grant).",
+                    text = "To scan and display all PDF and TXT files stored across your entire internal storage and SD cards, PDF (AIO) needs All Files Access permission in Android Settings.\n\nYou can also select any specific folder via Storage Access Framework (one-time grant).",
                     color = AdfTextSecondary,
                     fontSize = 13.5.sp,
                     lineHeight = 19.sp
@@ -982,8 +980,6 @@ fun HomeScreen(
                 documentPickerLauncher.launch(
                     arrayOf(
                         "application/pdf",
-                        "application/msword",
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         "text/plain"
                     )
                 )
@@ -1079,19 +1075,12 @@ fun UnifiedDocumentCard(
 
     val badgeColor = when (doc.fileType) {
         DeviceFileType.PDF -> AdfCoral
-        DeviceFileType.WORD_DOCX, DeviceFileType.WORD_DOC -> Color(0xFF3B82F6)
-        DeviceFileType.EXCEL -> Color(0xFF10B981)
-        DeviceFileType.POWERPOINT -> Color(0xFFF97316)
         DeviceFileType.TEXT -> Color(0xFF8B5CF6)
         else -> AdfElectricCyan
     }
 
     val badgeText = when (doc.fileType) {
         DeviceFileType.PDF -> "PDF"
-        DeviceFileType.WORD_DOCX -> "DOCX"
-        DeviceFileType.WORD_DOC -> "DOC"
-        DeviceFileType.EXCEL -> "XLS"
-        DeviceFileType.POWERPOINT -> "PPT"
         DeviceFileType.TEXT -> "TXT"
         else -> "FILE"
     }
@@ -1135,15 +1124,6 @@ fun UnifiedDocumentCard(
                 when (doc.fileType) {
                     DeviceFileType.PDF -> {
                         AdfIcon.PdfDoc(size = 28.dp, primaryColor = AdfCoral, accentColor = Color.White)
-                    }
-                    DeviceFileType.WORD_DOCX, DeviceFileType.WORD_DOC -> {
-                        AdfIcon.WordDoc(size = 28.dp, primaryColor = Color(0xFF3B82F6), accentColor = Color.White)
-                    }
-                    DeviceFileType.EXCEL -> {
-                        AdfIcon.FileOpen(size = 26.dp, primaryColor = Color(0xFF10B981), accentColor = Color.White)
-                    }
-                    DeviceFileType.POWERPOINT -> {
-                        AdfIcon.FileOpen(size = 26.dp, primaryColor = Color(0xFFF97316), accentColor = Color.White)
                     }
                     DeviceFileType.TEXT -> {
                         AdfIcon.FileOpen(size = 26.dp, primaryColor = Color(0xFF8B5CF6), accentColor = Color.White)
@@ -1250,23 +1230,23 @@ fun UnifiedDocumentCard(
                     onDismissRequest = { showMenu = false },
                     modifier = Modifier.background(AcrobatDarkSurfaceElevated)
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Open Reader & Tools", color = AdfTextPrimary) },
-                        leadingIcon = { AdfIcon.Tools(size = 18.dp, primaryColor = AdfElectricCyan) },
-                        onClick = {
-                            showMenu = false
-                            onOpenStandard()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Pure Viewer (Distraction Free)", color = AdfTextPrimary) },
-                        leadingIcon = { AdfIcon.PureViewer(size = 18.dp, primaryColor = Color(0xFF10B981)) },
-                        onClick = {
-                            showMenu = false
-                            onOpenPureViewer()
-                        }
-                    )
                     if (doc.isPdf) {
+                        DropdownMenuItem(
+                            text = { Text("Open Reader & Tools", color = AdfTextPrimary) },
+                            leadingIcon = { AdfIcon.Tools(size = 18.dp, primaryColor = AdfElectricCyan) },
+                            onClick = {
+                                showMenu = false
+                                onOpenStandard()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Pure Viewer (Distraction Free)", color = AdfTextPrimary) },
+                            leadingIcon = { AdfIcon.PureViewer(size = 18.dp, primaryColor = Color(0xFF10B981)) },
+                            onClick = {
+                                showMenu = false
+                                onOpenPureViewer()
+                            }
+                        )
                         DropdownMenuItem(
                             text = { Text("Preview First Page", color = AdfElectricCyan) },
                             leadingIcon = { AdfIcon.PureViewer(size = 18.dp, primaryColor = AdfElectricCyan) },
@@ -1293,11 +1273,19 @@ fun UnifiedDocumentCard(
                         )
                     } else {
                         DropdownMenuItem(
-                            text = { Text("Convert to PDF & View", color = AdfTextPrimary) },
-                            leadingIcon = { AdfIcon.PdfDoc(size = 18.dp, primaryColor = AdfCoral) },
+                            text = { Text("Open TXT Viewer", color = AdfTextPrimary) },
+                            leadingIcon = { AdfIcon.FileOpen(size = 18.dp, primaryColor = AdfElectricCyan) },
                             onClick = {
                                 showMenu = false
                                 onOpenStandard()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Convert TXT to PDF", color = AdfTextPrimary) },
+                            leadingIcon = { AdfIcon.PdfDoc(size = 18.dp, primaryColor = AdfCoral) },
+                            onClick = {
+                                showMenu = false
+                                onConvertToOther()
                             }
                         )
                     }

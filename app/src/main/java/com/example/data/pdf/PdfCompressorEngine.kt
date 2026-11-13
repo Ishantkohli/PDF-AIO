@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.io.RandomAccessFile
+import java.util.Locale
 
 object PdfCompressorEngine {
 
@@ -109,20 +109,26 @@ object PdfCompressorEngine {
                 onProgress(i + 1, totalPages)
 
                 val page = renderer.openPage(i)
-                val origW = page.width
-                val origH = page.height
+                val origW: Int
+                val origH: Int
+                val bitmap: Bitmap
+                try {
+                    origW = page.width
+                    origH = page.height
 
-                // Target render dimensions with quality scaling factor
-                val targetW = (origW * scale).toInt().coerceAtLeast(100)
-                val targetH = (origH * scale).toInt().coerceAtLeast(100)
+                    // Target render dimensions with quality scaling factor
+                    val targetW = (origW * scale).toInt().coerceAtLeast(100)
+                    val targetH = (origH * scale).toInt().coerceAtLeast(100)
 
-                val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                canvas.drawColor(Color.WHITE)
+                    bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(bitmap)
+                    canvas.drawColor(Color.WHITE)
 
-                // Render page content
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                page.close()
+                    // Render page content
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                } finally {
+                    try { page.close() } catch (ignored: Exception) {}
+                }
 
                 // Compress bitmap to JPEG byte stream
                 val jpegStream = ByteArrayOutputStream()
@@ -158,10 +164,9 @@ object PdfCompressorEngine {
                 pdfDocument.writeTo(fos)
             }
 
-            // If metadata stripping requested, perform clean binary metadata cleanup
-            if (options.stripMetadata) {
-                stripPdfMetadata(outputFile)
-            }
+            // Note: Android's PdfDocument writes a clean re-encoded PDF stream without carrying over
+            // source XMP/Author metadata dictionaries, so no post-write binary mutation is needed
+            // (mutating byte lengths post-write would invalidate the PDF xref offset table).
 
             val compressedSize = outputFile.length()
             val savedBytes = (originalSize - compressedSize).coerceAtLeast(0L)
@@ -171,7 +176,7 @@ object PdfCompressorEngine {
 
             val timeTaken = System.currentTimeMillis() - startTime
 
-            Log.d(TAG, "Compressed ${inputFile.name}: $originalSize -> $compressedSize bytes (${String.format("%.1f", reductionPercent)}% saved in ${timeTaken}ms)")
+            Log.d(TAG, "Compressed ${inputFile.name}: $originalSize -> $compressedSize bytes (${String.format(Locale.US, "%.1f", reductionPercent)}% saved in ${timeTaken}ms)")
 
             CompressionResult(
                 isSuccess = true,
@@ -200,29 +205,6 @@ object PdfCompressorEngine {
             try { renderer?.close() } catch (ignored: Exception) {}
             try { pfd?.close() } catch (ignored: Exception) {}
             try { pdfDocument?.close() } catch (ignored: Exception) {}
-        }
-    }
-
-    /**
-     * Binary PDF metadata & XML stream cleaner. Removes redundant Creator, Producer, Author metadata tags
-     * and trailer info entries to optimize file structure.
-     */
-    private fun stripPdfMetadata(file: File) {
-        try {
-            val bytes = file.readBytes()
-            var content = String(bytes, Charsets.ISO_8859_1)
-
-            // Remove /Producer, /Creator, /Author, /CreationDate entries from trailer info dictionary
-            content = content.replace(Regex("/Producer\\s*\\([^)]*\\)"), "")
-                .replace(Regex("/Creator\\s*\\([^)]*\\)"), "")
-                .replace(Regex("/Author\\s*\\([^)]*\\)"), "")
-                .replace(Regex("/CreationDate\\s*\\([^)]*\\)"), "")
-                .replace(Regex("/ModDate\\s*\\([^)]*\\)"), "")
-                .replace(Regex("<x:xmpmeta[\\s\\S]*?</x:xmpmeta>"), "")
-
-            file.writeBytes(content.toByteArray(Charsets.ISO_8859_1))
-        } catch (e: Exception) {
-            Log.w(TAG, "Non-critical error stripping PDF metadata tags", e)
         }
     }
 }

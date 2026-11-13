@@ -225,7 +225,7 @@ fun OfflineTtsVisualizer(
                         } else {
                             ttsEngine?.setSpeechRate(currentSpeed)
                             ttsEngine?.speak(
-                                textToRead.ifBlank { "PDF AIO 100% offline text to speech reader." },
+                                textToRead.ifBlank { "PDF (AIO) 100% offline text to speech reader." },
                                 TextToSpeech.QUEUE_FLUSH,
                                 null,
                                 "tts_read_id"

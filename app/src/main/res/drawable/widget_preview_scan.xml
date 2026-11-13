@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/widget_glass_card_bg" />
+    <item
+        android:drawable="@drawable/widget_badge_cyan"
+        android:width="68dp"
+        android:height="68dp"
+        android:gravity="center" />
+    <item
+        android:drawable="@drawable/ic_widget_scanner"
+        android:width="38dp"
+        android:height="38dp"
+        android:gravity="center" />
+</layer-list>

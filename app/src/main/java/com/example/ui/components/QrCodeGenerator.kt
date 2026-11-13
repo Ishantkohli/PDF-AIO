@@ -1,8 +1,6 @@
 package com.example.ui.components
 
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
 
 /**
  * Pure Kotlin, 100% offline, ISO/IEC 18004 compliant QR Code generator.
@@ -46,19 +44,14 @@ object QrCodeGenerator {
         backgroundColor: Int = android.graphics.Color.WHITE
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val paint = Paint().apply { isAntiAlias = false } // Sharp pixel boundary for optimal optical camera scanning
-
-        // Fill background with solid white
-        paint.color = backgroundColor
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
 
         // Version 3 matrix (29x29 modules) accommodates up to 55 data bytes
         val qrSize = 29
         val quietZone = 4 // Mandatory 4-module quiet zone padding for camera optical sensors
         val totalGrid = qrSize + (quietZone * 2)
 
-        val moduleSize = width.toFloat() / totalGrid
+        val moduleSizeX = width.toFloat() / totalGrid
+        val moduleSizeY = height.toFloat() / totalGrid
         val matrix = Array(qrSize) { BooleanArray(qrSize) }
 
         // 1. Draw 7x7 Finder Patterns at top-left, top-right, bottom-left
@@ -69,8 +62,8 @@ object QrCodeGenerator {
         // 2. Separator white lines around finder patterns
         drawSeparators(matrix, qrSize)
 
-        // 3. Alignment Pattern for Version 3 at (20, 20)
-        drawAlignmentPattern(matrix, 20, 20)
+        // 3. Alignment Pattern for Version 3 at (22, 22) per ISO/IEC 18004
+        drawAlignmentPattern(matrix, qrSize - 7, qrSize - 7)
 
         // 4. Timing Patterns (Row 6 and Column 6)
         for (i in 8 until qrSize - 8) {
@@ -78,8 +71,8 @@ object QrCodeGenerator {
             matrix[i][6] = (i % 2 == 0)
         }
 
-        // 5. Fixed Dark Module at (20, 8)
-        matrix[20][8] = true
+        // 5. Fixed Dark Module at (8, 4 * V + 9) = (8, 21)
+        matrix[qrSize - 8][8] = true
 
         // 6. Format Information Area Reserved Masks
         reserveFormatInfo(matrix, qrSize)
@@ -165,19 +158,25 @@ object QrCodeGenerator {
         // 10. Draw BCH Format Info Bits (Mask 0 + Error Correction L = 01 -> 0x73C0)
         drawFormatInfo(matrix, qrSize)
 
-        // 11. Render Matrix to Canvas with Quiet Zone Margin
-        paint.color = foregroundColor
+        // 11. Render Matrix directly to crisp pixel buffer with Quiet Zone Margin
+        val pixels = IntArray(width * height) { backgroundColor }
         for (r in 0 until qrSize) {
+            val pyStart = ((r + quietZone) * moduleSizeY).toInt().coerceIn(0, height)
+            val pyEnd = ((r + quietZone + 1) * moduleSizeY).toInt().coerceIn(pyStart, height)
             for (c in 0 until qrSize) {
                 if (matrix[r][c]) {
-                    val left = (c + quietZone) * moduleSize
-                    val top = (r + quietZone) * moduleSize
-                    val right = left + moduleSize
-                    val bottom = top + moduleSize
-                    canvas.drawRect(left, top, right, bottom, paint)
+                    val pxStart = ((c + quietZone) * moduleSizeX).toInt().coerceIn(0, width)
+                    val pxEnd = ((c + quietZone + 1) * moduleSizeX).toInt().coerceIn(pxStart, width)
+                    for (py in pyStart until pyEnd) {
+                        val rowOffset = py * width
+                        for (px in pxStart until pxEnd) {
+                            pixels[rowOffset + px] = foregroundColor
+                        }
+                    }
                 }
             }
         }
+        bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
 
         return bitmap
     }
@@ -275,8 +274,8 @@ object QrCodeGenerator {
     }
 
     private fun drawFormatInfo(matrix: Array<BooleanArray>, size: Int) {
-        // Format bits for L-Level + Mask 0: 0x73C0 (15 bits)
-        val formatBits = intArrayOf(1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0)
+        // Standard ISO/IEC 18004 BCH(15,5) format bits for Error Correction L (01) + Mask 0 (000) -> 0x77C4
+        val formatBits = intArrayOf(1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0)
 
         // Top-Left format placement
         var bitIdx = 0
@@ -295,8 +294,9 @@ object QrCodeGenerator {
     private fun isReserved(x: Int, y: Int, size: Int): Boolean {
         if (x in 0..8 && y in 0..8) return true // Top-Left Finder & Separator & Format
         if (x in (size - 8) until size && y in 0..8) return true // Top-Right Finder & Separator & Format
-        if (x in 0..8 && y in (size - 8) until size) return true // Bottom-Left Finder & Separator & Format
-        if (x in 18..22 && y in 18..22) return true // Alignment Pattern at (20,20)
+        if (x in 0..8 && y in (size - 8) until size) return true // Bottom-Left Finder & Separator & Format & Dark Module
+        val alignCenter = size - 7
+        if (x in (alignCenter - 2)..(alignCenter + 2) && y in (alignCenter - 2)..(alignCenter + 2)) return true // Alignment Pattern at (22,22)
         if (x == 6 || y == 6) return true // Timing Patterns
         return false
     }

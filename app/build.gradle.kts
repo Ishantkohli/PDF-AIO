@@ -16,8 +16,8 @@ android {
     applicationId = "com.aistudio.acrobatreader.hptwqz"
     minSdk = 24
     targetSdk = 36
-    versionCode = 516
-    versionName = "5.1.6"
+    versionCode = 520
+    versionName = "5.2.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

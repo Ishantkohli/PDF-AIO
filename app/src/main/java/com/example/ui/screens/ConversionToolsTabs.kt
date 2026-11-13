@@ -981,3 +981,349 @@ fun WatermarkStudioTab(
         }
     }
 }
+
+// ==========================================
+// 5. PDF TO TXT TAB
+// ==========================================
+
+@Composable
+fun PdfToTxtTab(
+    viewModel: PdfViewModel,
+    documents: List<DocumentEntity>
+) {
+    val context = LocalContext.current
+    var selectedDoc by remember { mutableStateOf(documents.firstOrNull()) }
+    var isConverting by remember { mutableStateOf(false) }
+    var convertedTxtFile by remember { mutableStateOf<File?>(null) }
+
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importPdfFromUri(uri)
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = AcrobatDarkSurface),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF8B5CF6).copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.TextSnippet, contentDescription = null, tint = Color(0xFF8B5CF6))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("PDF to TXT Converter", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = AcrobatTextPrimary)
+                            Text("Extracts clean UTF-8 readable text per page", style = MaterialTheme.typography.bodySmall, color = AcrobatTextSecondary)
+                        }
+                    }
+
+                    HorizontalDivider(color = AcrobatDarkBorder)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Select PDF to Extract", style = MaterialTheme.typography.labelMedium, color = AcrobatTextSecondary)
+                        TextButton(onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) }) {
+                            Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp), tint = CrimsonAccent)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Pick File", color = CrimsonAccent, fontSize = 12.sp)
+                        }
+                    }
+
+                    if (documents.isEmpty()) {
+                        Text("No PDF documents in library.", color = AcrobatTextMuted, fontSize = 12.sp)
+                    } else {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(documents) { doc ->
+                                val isSelected = selectedDoc?.id == doc.id
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { selectedDoc = doc },
+                                    label = { Text(doc.title.take(18)) },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = if (isSelected) CrimsonAccent else AcrobatTextMuted, modifier = Modifier.size(16.dp))
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = CrimsonPrimary.copy(alpha = 0.25f),
+                                        selectedLabelColor = Color.White,
+                                        containerColor = AcrobatDarkSurfaceElevated,
+                                        labelColor = AcrobatTextSecondary
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            val doc = selectedDoc ?: return@Button
+                            isConverting = true
+                            convertedTxtFile = null
+                            viewModel.convertPdfToTxt(doc) { outFile ->
+                                isConverting = false
+                                convertedTxtFile = outFile
+                            }
+                        },
+                        enabled = selectedDoc != null && !isConverting,
+                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("convert_pdf_to_txt_action_button")
+                    ) {
+                        if (isConverting) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Extracting Text...")
+                        } else {
+                            Icon(Icons.Default.TextSnippet, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Convert to TXT (.txt)")
+                        }
+                    }
+
+                    convertedTxtFile?.let { txtFile ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = AcrobatDarkSurfaceElevated),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(22.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(txtFile.name, color = AcrobatTextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text("${txtFile.length() / 1024} KB • UTF-8 Plain Text", color = AcrobatTextSecondary, fontSize = 11.sp)
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            viewModel.openTxtDocument(Uri.fromFile(txtFile), txtFile.name)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Open in TXT Viewer", fontSize = 12.sp)
+                                    }
+                                    Button(
+                                        onClick = {
+                                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", txtFile)
+                                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(Intent.EXTRA_STREAM, uri)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            }
+                                            context.startActivity(Intent.createChooser(intent, "Share TXT File"))
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Share TXT", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// 6. TXT TO PDF TAB
+// ==========================================
+
+@Composable
+fun TxtToPdfTab(viewModel: PdfViewModel) {
+    val context = LocalContext.current
+    var selectedTxtUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedTxtName by remember { mutableStateOf("") }
+    var customPdfTitle by remember { mutableStateOf("") }
+    var isConverting by remember { mutableStateOf(false) }
+
+    val txtPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            selectedTxtUri = uri
+            var name = "Document.txt"
+            try {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1) name = cursor.getString(nameIndex)
+                    }
+                }
+            } catch (ignored: Exception) {}
+            selectedTxtName = name
+            customPdfTitle = name.substringBeforeLast(".")
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = AcrobatDarkSurface),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF06B6D4).copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Description, contentDescription = null, tint = Color(0xFF06B6D4))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("TXT to PDF Converter", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = AcrobatTextPrimary)
+                            Text("Formats plain .txt files into multi-page PDF sheets", style = MaterialTheme.typography.bodySmall, color = AcrobatTextSecondary)
+                        }
+                    }
+
+                    HorizontalDivider(color = AcrobatDarkBorder)
+
+                    if (selectedTxtUri == null) {
+                        OutlinedButton(
+                            onClick = { txtPicker.launch(arrayOf("text/plain")) },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = CrimsonAccent),
+                            border = ButtonDefaults.outlinedButtonBorder(true).copy(brush = androidx.compose.ui.graphics.SolidColor(CrimsonPrimary)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                        ) {
+                            Icon(Icons.Default.UploadFile, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Choose Text File (.txt)")
+                        }
+                    } else {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = AcrobatDarkSurfaceElevated),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.TextSnippet, contentDescription = null, tint = Color(0xFF8B5CF6), modifier = Modifier.size(24.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(selectedTxtName, color = AcrobatTextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text("Text file ready for PDF conversion", color = AcrobatTextSecondary, fontSize = 11.sp)
+                                    }
+                                }
+
+                                IconButton(onClick = { selectedTxtUri = null }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Remove", tint = AcrobatTextMuted)
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = customPdfTitle,
+                            onValueChange = { customPdfTitle = it },
+                            label = { Text("Output PDF Title") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = AcrobatTextPrimary,
+                                unfocusedTextColor = AcrobatTextPrimary,
+                                focusedBorderColor = CrimsonPrimary,
+                                unfocusedBorderColor = AcrobatDarkBorder,
+                                focusedLabelColor = CrimsonAccent,
+                                unfocusedLabelColor = AcrobatTextSecondary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Button(
+                            onClick = {
+                                val uri = selectedTxtUri ?: return@Button
+                                isConverting = true
+                                viewModel.convertTxtUriToPdf(
+                                    txtUri = uri,
+                                    docTitle = customPdfTitle.ifBlank { "Text_Document" }
+                                ) { newDoc ->
+                                    isConverting = false
+                                    if (newDoc != null) {
+                                        selectedTxtUri = null
+                                    }
+                                }
+                            },
+                            enabled = !isConverting,
+                            colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("convert_txt_to_pdf_action_button")
+                        ) {
+                            if (isConverting) {
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Converting TXT to PDF...")
+                            } else {
+                                Icon(Icons.Default.PictureAsPdf, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Convert and Open in PDF Reader")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

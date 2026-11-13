@@ -40,6 +40,10 @@ class PdfRendererManager(val file: File) {
             pdfRenderer = PdfRenderer(fileDescriptor!!)
             pageCount = pdfRenderer?.pageCount ?: 0
         } catch (e: Exception) {
+            try { pdfRenderer?.close() } catch (ignored: Exception) {}
+            try { fileDescriptor?.close() } catch (ignored: Exception) {}
+            pdfRenderer = null
+            fileDescriptor = null
             Log.e("PdfRendererManager", "Error opening PDF file: ${file.path}", e)
             throw e
         }
@@ -97,6 +101,7 @@ class PdfRendererManager(val file: File) {
                 }
 
                 bitmap?.let { bmp ->
+                    bmp.eraseColor(android.graphics.Color.WHITE)
                     page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                     val finalResult = if (autoSharpen4K) apply4KSharpenFilter(bmp) else bmp
                     memoryCache.put(cacheKey, finalResult)
@@ -136,6 +141,9 @@ class PdfRendererManager(val file: File) {
             )
             paint.colorFilter = android.graphics.ColorMatrixColorFilter(colorMatrix)
             canvas.drawBitmap(source, 0f, 0f, paint)
+            if (output !== source && !source.isRecycled) {
+                source.recycle()
+            }
             return output
         } catch (e: Exception) {
             return source

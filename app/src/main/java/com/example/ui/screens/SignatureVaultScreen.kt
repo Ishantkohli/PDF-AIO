@@ -207,9 +207,12 @@ fun SignatureVaultScreen(viewModel: PdfViewModel) {
                         }
 
                         val isTyped = targetSig.pathsJson.contains("TYPED")
+                        var parsedColorHex = 0xFF1E3A8AL
                         val text = if (isTyped) {
                             try {
-                                JSONObject(targetSig.pathsJson).optString("text", targetSig.title)
+                                val obj = JSONObject(targetSig.pathsJson)
+                                parsedColorHex = obj.optLong("colorHex", 0xFF1E3A8AL) and 0xFFFFFFFFL
+                                obj.optString("text", targetSig.title)
                             } catch (e: Exception) {
                                 targetSig.title
                             }
@@ -224,7 +227,7 @@ fun SignatureVaultScreen(viewModel: PdfViewModel) {
                             isTyped = isTyped,
                             typedText = text,
                             strokePathsJson = if (isTyped) "" else targetSig.pathsJson,
-                            colorHex = 0xFF1E3A8AL,
+                            colorHex = parsedColorHex,
                             posX = posX,
                             posY = posY,
                             saveToVault = false
@@ -427,6 +430,44 @@ fun SignatureVaultScreen(viewModel: PdfViewModel) {
                             }
                         }
 
+                        // Ink Color choices
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Ink:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AdfTextSecondary
+                            )
+                            InkColors.forEach { ink ->
+                                val isInkSelected = selectedInkColor.hex == ink.hex
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(ink.color)
+                                        .border(
+                                            width = if (isInkSelected) 2.5.dp else 1.dp,
+                                            color = if (isInkSelected) AdfElectricCyan else Color.Transparent,
+                                            shape = CircleShape
+                                        )
+                                        .clickable { selectedInkColor = ink }
+                                        .testTag("vault_ink_${ink.name.lowercase().replace(" ", "_")}"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isInkSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = ink.name,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         // Save Quick Signature Button
                         Button(
                             onClick = {
@@ -557,11 +598,13 @@ fun SavedSignatureCard(
                 modifier = Modifier.size(96.dp, 52.dp)
             ) {
                 if (isTyped) {
-                    val previewText = try {
-                        JSONObject(signature.pathsJson).optString("text", signature.title)
-                    } catch (e: Exception) {
-                        signature.title
-                    }
+                    var previewText = signature.title
+                    var previewColorHex = 0xFF1E3A8AL
+                    try {
+                        val obj = JSONObject(signature.pathsJson)
+                        previewText = obj.optString("text", signature.title)
+                        previewColorHex = obj.optLong("colorHex", 0xFF1E3A8AL) and 0xFFFFFFFFL
+                    } catch (_: Exception) {}
                     Box(
                         modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
                         contentAlignment = Alignment.Center
@@ -572,7 +615,7 @@ fun SavedSignatureCard(
                             fontStyle = FontStyle.Italic,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Cursive,
-                            color = Color(0xFF1E3A8A),
+                            color = Color(previewColorHex),
                             maxLines = 1
                         )
                     }

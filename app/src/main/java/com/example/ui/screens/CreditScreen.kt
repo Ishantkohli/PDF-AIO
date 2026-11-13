@@ -44,7 +44,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.BuildConfig
 import com.example.ui.PdfViewModel
 import com.example.ui.components.AdfIcon
@@ -67,7 +70,7 @@ data class SocialPlatformInfo(
 )
 
 /**
- * Optimized ADF AIO Credit & Developer Screen
+ * Optimized PDF (AIO) Credit & Developer Screen
  * Universal compatibility for every phone worldwide (small, foldables, tablets).
  * Features 30 FPS capped electrical neon borders, 8 social media platforms,
  * and official verified developer credentials (Ishant Kohli, Google AI Studio, 10/10/2026).
@@ -96,27 +99,32 @@ fun CreditScreen(
         )
     }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
     var selectedIndex by remember { mutableIntStateOf(0) }
     var isAutoPlayEnabled by remember { mutableStateOf(true) }
 
-    // STRICT 30 FPS ANIMATION LOOP: Active ONLY while CreditScreen is mounted
+    // STRICT 30 FPS ANIMATION LOOP: Active ONLY while CreditScreen is STARTED
     var frameTick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
-        val targetFrameDurationMs = 33L
-        while (isActive) {
-            val start = System.currentTimeMillis()
-            frameTick++
-            val elapsed = System.currentTimeMillis() - start
-            val sleepMs = (targetFrameDurationMs - elapsed).coerceAtLeast(1L)
-            delay(sleepMs)
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val targetFrameDurationMs = 33L
+            while (isActive) {
+                val start = System.currentTimeMillis()
+                frameTick++
+                val elapsed = System.currentTimeMillis() - start
+                val sleepMs = (targetFrameDurationMs - elapsed).coerceAtLeast(1L)
+                delay(sleepMs)
+            }
         }
     }
 
-    // Auto-advance carousel smoothly
-    LaunchedEffect(isAutoPlayEnabled) {
-        while (isAutoPlayEnabled && isActive) {
-            delay(3800L)
-            selectedIndex = (selectedIndex + 1) % platforms.size
+    // Auto-advance carousel smoothly while STARTED
+    LaunchedEffect(lifecycleOwner, isAutoPlayEnabled) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isAutoPlayEnabled && isActive) {
+                delay(3800L)
+                selectedIndex = (selectedIndex + 1) % platforms.size
+            }
         }
     }
 
@@ -448,7 +456,7 @@ fun CreditScreen(
                             Spacer(modifier = Modifier.height(10.dp))
 
                             val specs = listOf(
-                                "Application Name" to "PDF AIO (All-In-One)",
+                                "Application Name" to "PDF (AIO) (All-In-One)",
                                 "Lead Architect" to "Ishant Kohli",
                                 "Engineering Partner" to "Google AI Studio",
                                 "Official Build Date" to "10/10/2026",
@@ -519,7 +527,7 @@ fun DeveloperCredentialsCard(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "PDF AIO OFFICIAL",
+                            text = "PDF (AIO) OFFICIAL",
                             color = AdfElectricCyan,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,

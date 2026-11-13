@@ -10,26 +10,46 @@
     android:clickable="true"
     android:focusable="true">
 
-    <ImageView
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:src="@android:drawable/ic_menu_slideshow"
-        android:tint="#F9E2AF" />
+    <FrameLayout
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:background="@drawable/widget_badge_amber"
+        android:padding="10dp">
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:src="@drawable/ic_widget_pdf_to_images"
+            android:contentDescription="PDF to Images" />
+    </FrameLayout>
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="PDF to Images"
-        android:textColor="#FFFFFF"
-        android:textSize="13sp"
+        android:text="PDF → Images"
+        android:textColor="#F8FAFC"
+        android:textSize="13.5sp"
         android:textStyle="bold"
+        android:maxLines="1"
         android:layout_marginTop="8dp" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Extract High-Res Pages"
-        android:textColor="#A6ADC8"
+        android:text="Extract HD Pages"
+        android:textColor="#94A3B8"
         android:textSize="10sp"
+        android:maxLines="1"
         android:layout_marginTop="2dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/widget_tile_glass_bg"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="3dp"
+        android:layout_marginTop="8dp"
+        android:text="Export PNGs"
+        android:textColor="#FBBF24"
+        android:textSize="9.5sp"
+        android:textStyle="bold" />
 </LinearLayout>

@@ -2,6 +2,7 @@ package com.example.data
 
 import android.content.Context
 import android.util.Log
+import com.example.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -27,14 +28,14 @@ object FeedbackDispatcher {
         updateSuggestion: String,
         appSuggestion: String
     ): Boolean = withContext(Dispatchers.IO) {
-        val userName = name.trim().ifBlank { "PDF AIO User" }
+        val userName = name.trim().ifBlank { "PDF (AIO) User" }
         val problems = problemsFaced.trim().ifBlank { "None reported" }
         val update = updateSuggestion.trim().ifBlank { "None reported" }
         val app = appSuggestion.trim().ifBlank { "None reported" }
 
         val formattedMessage = buildString {
             appendLine("=========================================")
-            appendLine("PDF AIO IN-APP USER FEEDBACK")
+            appendLine("PDF (AIO) IN-APP USER FEEDBACK")
             appendLine("=========================================")
             appendLine("Name : $userName")
             appendLine()
@@ -48,7 +49,7 @@ object FeedbackDispatcher {
             appendLine(app)
             appendLine()
             appendLine("=========================================")
-            appendLine("Sent automatically from PDF AIO v5.1.6 Android App")
+            appendLine("Sent automatically from PDF (AIO) v${BuildConfig.VERSION_NAME} Android App")
         }
 
         // Cache submission locally as durable offline backup
@@ -63,9 +64,10 @@ object FeedbackDispatcher {
         var dispatched = false
 
         // 1. Direct Web3Forms submission (Same provider and key as https://ishantkohli.me)
+        var web3Conn: HttpURLConnection? = null
         try {
             val web3Url = URL("https://api.web3forms.com/submit")
-            val conn = (web3Url.openConnection() as HttpURLConnection).apply {
+            web3Conn = (web3Url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Accept", "application/json")
@@ -80,33 +82,35 @@ object FeedbackDispatcher {
                 put("access_key", WEB3FORMS_KEY)
                 put("name", userName)
                 put("email", DEVELOPER_EMAIL)
-                put("subject", "New Feedback Submission from $userName (PDF AIO App)")
+                put("subject", "New Feedback Submission from $userName (PDF (AIO) App)")
                 put("message", formattedMessage)
                 put("Any Problems Faced", problems)
                 put("Suggestion for new update", update)
                 put("Suggestion on the app", app)
-                put("from_name", "PDF AIO Android App")
+                put("from_name", "PDF (AIO) Android App")
             }
 
-            OutputStreamWriter(conn.outputStream).use { writer ->
+            OutputStreamWriter(web3Conn.outputStream).use { writer ->
                 writer.write(json.toString())
                 writer.flush()
             }
 
-            val respCode = conn.responseCode
+            val respCode = web3Conn.responseCode
             Log.i(TAG, "Web3Forms submission HTTP response: $respCode")
             if (respCode in 200..299) {
                 dispatched = true
             }
-            conn.disconnect()
         } catch (e: Exception) {
             Log.e(TAG, "Web3Forms error: ${e.message}")
+        } finally {
+            try { web3Conn?.disconnect() } catch (_: Exception) {}
         }
 
         // 2. Direct email delivery to ishantkohlikohli@gmail.com
+        var shipConn: HttpURLConnection? = null
         try {
             val shipUrl = URL("https://shipmyform.com/to/$DEVELOPER_EMAIL")
-            val conn = (shipUrl.openConnection() as HttpURLConnection).apply {
+            shipConn = (shipUrl.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Accept", "application/json")
@@ -120,26 +124,27 @@ object FeedbackDispatcher {
             val json = JSONObject().apply {
                 put("name", userName)
                 put("email", DEVELOPER_EMAIL)
-                put("_subject", "PDF AIO Feedback: $userName")
+                put("_subject", "PDF (AIO) Feedback: $userName")
                 put("message", formattedMessage)
                 put("Any Problems Faced", problems)
                 put("Suggestion for new update", update)
                 put("Suggestion on the app", app)
             }
 
-            OutputStreamWriter(conn.outputStream).use { writer ->
+            OutputStreamWriter(shipConn.outputStream).use { writer ->
                 writer.write(json.toString())
                 writer.flush()
             }
 
-            val respCode = conn.responseCode
+            val respCode = shipConn.responseCode
             Log.i(TAG, "Direct mail submission HTTP response: $respCode")
             if (respCode in 200..299) {
                 dispatched = true
             }
-            conn.disconnect()
         } catch (e: Exception) {
             Log.e(TAG, "Direct mail submission error: ${e.message}")
+        } finally {
+            try { shipConn?.disconnect() } catch (_: Exception) {}
         }
 
         dispatched

@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,7 +60,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.fps.DisplayRefreshRateManager
 import com.example.data.local.AnnotationEntity
 import com.example.data.pdf.DocumentConverterEngine
 import com.example.ui.AnnotationTool
@@ -99,6 +99,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val currentSearchMatchIndex by viewModel.currentSearchMatchIndex.collectAsStateWithLifecycle()
     val hapticFeedback = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val density = LocalDensity.current
 
     var isBarsVisible by remember { mutableStateOf(true) }
     var showThumbnailsSheet by remember { mutableStateOf(false) }
@@ -127,6 +128,8 @@ fun ReaderScreen(viewModel: PdfViewModel) {
     var selectedStampText by remember { mutableStateOf("APPROVED") }
     var showSignaturePicker by remember { mutableStateOf(false) }
     var selectedSignatureJson by remember { mutableStateOf<String?>(null) }
+    var selectedSignatureAnnId by remember { mutableStateOf<Long?>(null) }
+    val signatureDragOffsets = remember { mutableStateMapOf<Long, Offset>() }
     var showOptionsMenu by remember { mutableStateOf(false) }
 
     val activeThemeStyle by ThemeManager.currentTheme.collectAsStateWithLifecycle()
@@ -174,21 +177,13 @@ fun ReaderScreen(viewModel: PdfViewModel) {
         }
     }
 
-    // Lock 60 FPS display target refresh rate when viewing documents
-    LaunchedEffect(Unit) {
-        val activity = context as? Activity
-        if (activity != null) {
-            DisplayRefreshRateManager.setTargetRefreshRate(activity, 60)
-        } else {
-            DisplayRefreshRateManager.setPreferredRefreshRate(60)
-        }
-    }
-
-    // Trigger rendering of active page + pre-fetch adjacent pages for smooth 60 FPS slide transitions
+    // Trigger rendering of active page + pre-fetch adjacent pages for smooth slide transitions
     LaunchedEffect(currentPage, currentDoc, totalPages) {
         scale = 1f
         offsetX = 0f
         offsetY = 0f
+        selectedSignatureAnnId = null
+        signatureDragOffsets.clear()
         viewModel.renderPage(currentPage)
         if (currentPage + 1 < totalPages) viewModel.renderPage(currentPage + 1)
         if (currentPage - 1 >= 0) viewModel.renderPage(currentPage - 1)
@@ -395,7 +390,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                         }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Liquid Mode Reflow", color = AcrobatTextPrimary) },
+                                        text = { Text("Reflow Reader Mode", color = AcrobatTextPrimary) },
                                         leadingIcon = { Icon(Icons.Default.WaterDrop, contentDescription = null, tint = Color(0xFF38BDF8)) },
                                         onClick = {
                                             showOptionsMenu = false
@@ -851,7 +846,11 @@ fun ReaderScreen(viewModel: PdfViewModel) {
 
                                     when (activeTool) {
                                         AnnotationTool.NONE -> {
-                                            isBarsVisible = !isBarsVisible
+                                            if (selectedSignatureAnnId != null) {
+                                                selectedSignatureAnnId = null
+                                            } else {
+                                                isBarsVisible = !isBarsVisible
+                                            }
                                         }
                                         AnnotationTool.STICKY_NOTE -> {
                                             pendingNotePosition = Offset(normX, normY)
@@ -894,15 +893,40 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                         AnnotationTool.SIGNATURE -> {
                                             val paths = selectedSignatureJson
                                                 ?: signatures.firstOrNull()?.pathsJson
-                                            if (paths != null) {
-                                                viewModel.addAnnotation(
-                                                    pageIndex = currentPage,
-                                                    type = "SIGNATURE",
-                                                    pointsJson = paths,
-                                                    posX = normX,
-                                                    posY = normY,
-                                                    colorHex = 0xFF1E293B
-                                                )
+                                            if (paths == null) {
+                                                viewModel.showSignatureDialog(true)
+                                            } else {
+                                                val trimmed = paths.trimStart()
+                                                val isTyped = trimmed.startsWith("{") && trimmed.contains("TYPED")
+                                                if (isTyped) {
+                                                    try {
+                                                        val obj = JSONObject(paths)
+                                                        val txt = obj.optString("text", "").ifBlank { "Signature" }
+                                                        val col = obj.optLong("colorHex", 0xFF1E3A8AL) and 0xFFFFFFFFL
+                                                        viewModel.addAnnotation(
+                                                            pageIndex = currentPage,
+                                                            type = "TYPED_SIGNATURE",
+                                                            textContent = txt,
+                                                            colorHex = col,
+                                                            strokeWidth = 26f,
+                                                            posX = normX.coerceIn(0.02f, 0.85f),
+                                                            posY = normY.coerceIn(0.05f, 0.96f)
+                                                        )
+                                                    } catch (_: Exception) {
+                                                        viewModel.showSignatureDialog(true)
+                                                    }
+                                                } else {
+                                                    viewModel.addAnnotation(
+                                                        pageIndex = currentPage,
+                                                        type = "SIGNATURE",
+                                                        pointsJson = paths,
+                                                        posX = (normX - 0.15f).coerceIn(0.01f, 0.70f),
+                                                        posY = (normY - 0.06f).coerceIn(0.01f, 0.88f),
+                                                        width = 0.30f,
+                                                        height = 0.12f,
+                                                        colorHex = 0xFF1E3A8AL
+                                                    )
+                                                }
                                                 hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                                             }
                                         }
@@ -1026,9 +1050,10 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                     )
                                 }
                                 "SIGNATURE", "TYPED_SIGNATURE" -> {
+                                    val liveDrag = signatureDragOffsets[ann.id] ?: Offset.Zero
                                     if (ann.textContent.isNotBlank()) {
-                                        val x = ann.posX * canvasW
-                                        val y = ann.posY * canvasH
+                                        val x = (ann.posX + liveDrag.x) * canvasW
+                                        val y = (ann.posY + liveDrag.y) * canvasH
                                         drawContext.canvas.nativeCanvas.apply {
                                             val sigPaint = android.graphics.Paint().apply {
                                                 color = ann.colorHex.toInt()
@@ -1052,6 +1077,10 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                             drawPath(flourishPath, flourishPaint)
                                         }
                                     } else if (ann.pointsJson.isNotBlank()) {
+                                        val sigW = (if (ann.width > 0.05f) ann.width else 0.30f) * canvasW
+                                        val sigH = (if (ann.height > 0.03f) ann.height else 0.12f) * canvasH
+                                        val baseX = (ann.posX + liveDrag.x) * canvasW
+                                        val baseY = (ann.posY + liveDrag.y) * canvasH
                                         try {
                                             val strokes = JSONArray(ann.pointsJson)
                                             for (s in 0 until strokes.length()) {
@@ -1059,8 +1088,8 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                                 val path = Path()
                                                 for (p in 0 until strokeArr.length()) {
                                                     val pt = strokeArr.getJSONObject(p)
-                                                    val px = pt.getDouble("x").toFloat() * canvasW
-                                                    val py = pt.getDouble("y").toFloat() * canvasH
+                                                    val px = baseX + pt.getDouble("x").toFloat() * sigW
+                                                    val py = baseY + pt.getDouble("y").toFloat() * sigH
                                                     if (p == 0) path.moveTo(px, py) else path.lineTo(px, py)
                                                 }
                                                 drawPath(
@@ -1150,12 +1179,11 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                         for (ann in pageAnnotations) {
                             if (ann.type == "STICKY_NOTE") {
                                 var showBubble by remember { mutableStateOf(false) }
+                                val noteX = with(density) { (ann.posX * pageSizePx.width).toDp() } - 14.dp
+                                val noteY = with(density) { (ann.posY * pageSizePx.height).toDp() } - 14.dp
                                 Box(
                                     modifier = Modifier
-                                        .offset(
-                                            x = (ann.posX * pageSizePx.width).dp - 14.dp,
-                                            y = (ann.posY * pageSizePx.height).dp - 14.dp
-                                        )
+                                        .offset(x = noteX, y = noteY)
                                         .size(28.dp)
                                         .clip(CircleShape)
                                         .clickable { showBubble = !showBubble },
@@ -1191,12 +1219,11 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                     }
                                 }
                             } else if (ann.type == "STAMP") {
+                                val stampX = with(density) { (ann.posX * pageSizePx.width).toDp() } - 55.dp
+                                val stampY = with(density) { (ann.posY * pageSizePx.height).toDp() } - 18.dp
                                 Box(
                                     modifier = Modifier
-                                        .offset(
-                                            x = (ann.posX * pageSizePx.width).dp - 55.dp,
-                                            y = (ann.posY * pageSizePx.height).dp - 18.dp
-                                        )
+                                        .offset(x = stampX, y = stampY)
                                         .size(110.dp, 36.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -1210,12 +1237,11 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                     )
                                 }
                             } else if (ann.type == "TEXT_BOX") {
+                                val boxX = with(density) { (ann.posX * pageSizePx.width).toDp() }
+                                val boxY = with(density) { (ann.posY * pageSizePx.height).toDp() } - 10.dp
                                 Box(
                                     modifier = Modifier
-                                        .offset(
-                                            x = (ann.posX * pageSizePx.width).dp,
-                                            y = (ann.posY * pageSizePx.height).dp - 10.dp
-                                        )
+                                        .offset(x = boxX, y = boxY)
                                         .clip(RoundedCornerShape(4.dp))
                                         .background(Color.White.copy(alpha = 0.95f))
                                         .border(1.dp, Color(0xFF38BDF8), RoundedCornerShape(4.dp))
@@ -1234,14 +1260,13 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                 }
                             } else if (ann.type == "WHITEOUT" || ann.type == "REDACT") {
                                 val isRedact = ann.type == "REDACT"
-                                val wDp = ((if (ann.width > 0f) ann.width else 0.25f) * pageSizePx.width).dp
-                                val hDp = ((if (ann.height > 0f) ann.height else 0.04f) * pageSizePx.height).dp
+                                val wDp = with(density) { ((if (ann.width > 0f) ann.width else 0.25f) * pageSizePx.width).toDp() }
+                                val hDp = with(density) { ((if (ann.height > 0f) ann.height else 0.04f) * pageSizePx.height).toDp() }
+                                val wX = with(density) { (ann.posX * pageSizePx.width).toDp() }
+                                val wY = with(density) { (ann.posY * pageSizePx.height).toDp() }
                                 Box(
                                     modifier = Modifier
-                                        .offset(
-                                            x = (ann.posX * pageSizePx.width).dp,
-                                            y = (ann.posY * pageSizePx.height).dp
-                                        )
+                                        .offset(x = wX, y = wY)
                                         .size(wDp, hDp)
                                         .background(if (isRedact) Color.Black else Color.White)
                                         .border(1.dp, if (isRedact) Color.Gray else Color(0xFFCBD5E1), RoundedCornerShape(2.dp))
@@ -1258,6 +1283,183 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
+                                    }
+                                }
+                            } else if ((ann.type == "SIGNATURE" || ann.type == "TYPED_SIGNATURE") &&
+                                pageSizePx.width > 0 && pageSizePx.height > 0
+                            ) {
+                                val isTypedSig = ann.textContent.isNotBlank()
+                                val liveDrag = signatureDragOffsets[ann.id] ?: Offset.Zero
+                                val textSizePx = if (ann.strokeWidth > 10f) ann.strokeWidth else 26f
+                                val sigWNorm = if (isTypedSig) {
+                                    val measuredW = remember(ann.textContent, textSizePx) {
+                                        android.graphics.Paint().apply {
+                                            textSize = textSizePx
+                                            isFakeBoldText = true
+                                            typeface = android.graphics.Typeface.create("cursive", android.graphics.Typeface.ITALIC)
+                                        }.measureText(ann.textContent)
+                                    }
+                                    ((measuredW + 32f) / pageSizePx.width.toFloat()).coerceIn(0.14f, 0.75f)
+                                } else {
+                                    if (ann.width > 0.05f) ann.width else 0.30f
+                                }
+                                val sigHNorm = if (isTypedSig) {
+                                    ((textSizePx + 26f) / pageSizePx.height.toFloat()).coerceIn(0.05f, 0.30f)
+                                } else {
+                                    if (ann.height > 0.03f) ann.height else 0.12f
+                                }
+
+                                val boxLeftPx = if (isTypedSig) {
+                                    (ann.posX + liveDrag.x) * pageSizePx.width - 10f
+                                } else {
+                                    (ann.posX + liveDrag.x) * pageSizePx.width
+                                }
+                                val boxTopPx = if (isTypedSig) {
+                                    (ann.posY + liveDrag.y) * pageSizePx.height - textSizePx - 4f
+                                } else {
+                                    (ann.posY + liveDrag.y) * pageSizePx.height
+                                }
+
+                                val boxX = with(density) { boxLeftPx.toDp() }
+                                val boxY = with(density) { boxTopPx.toDp() }
+                                val boxW = with(density) { (sigWNorm * pageSizePx.width).toDp() }.coerceAtLeast(72.dp)
+                                val boxH = with(density) { (sigHNorm * pageSizePx.height).toDp() }.coerceAtLeast(36.dp)
+                                val isSelected = selectedSignatureAnnId == ann.id
+                                val canMoveSignatures = activeTool != AnnotationTool.PEN && activeTool != AnnotationTool.HIGHLIGHT
+
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = boxX, y = boxY)
+                                        .size(width = boxW, height = boxH)
+                                        .then(
+                                            if (isSelected) {
+                                                Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(AdfElectricCyan.copy(alpha = 0.08f))
+                                                    .border(1.5.dp, AdfElectricCyan, RoundedCornerShape(8.dp))
+                                            } else {
+                                                Modifier
+                                            }
+                                        )
+                                        .then(
+                                            if (canMoveSignatures) {
+                                                Modifier
+                                                    .pointerInput(ann.id, canMoveSignatures) {
+                                                        detectTapGestures {
+                                                            selectedSignatureAnnId = if (selectedSignatureAnnId == ann.id) null else ann.id
+                                                        }
+                                                    }
+                                                    .pointerInput(ann.id, canMoveSignatures, pageSizePx, sigWNorm, sigHNorm) {
+                                                        detectDragGestures(
+                                                            onDragStart = {
+                                                                selectedSignatureAnnId = ann.id
+                                                                signatureDragOffsets[ann.id] = Offset.Zero
+                                                                hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                            },
+                                                            onDrag = { change, dragAmount ->
+                                                                change.consume()
+                                                                val cur = signatureDragOffsets[ann.id] ?: Offset.Zero
+                                                                val nextX = cur.x + dragAmount.x / pageSizePx.width.toFloat()
+                                                                val nextY = cur.y + dragAmount.y / pageSizePx.height.toFloat()
+                                                                val minPosX = if (isTypedSig) 0.01f else 0f
+                                                                val maxPosX = if (isTypedSig) 0.94f else (1f - sigWNorm).coerceAtLeast(0f)
+                                                                val minPosY = if (isTypedSig) 0.03f else 0f
+                                                                val maxPosY = if (isTypedSig) 0.98f else (1f - sigHNorm).coerceAtLeast(0f)
+                                                                signatureDragOffsets[ann.id] = Offset(
+                                                                    (ann.posX + nextX).coerceIn(minPosX, maxPosX) - ann.posX,
+                                                                    (ann.posY + nextY).coerceIn(minPosY, maxPosY) - ann.posY
+                                                                )
+                                                            },
+                                                            onDragEnd = {
+                                                                val finalDrag = signatureDragOffsets.remove(ann.id) ?: Offset.Zero
+                                                                val minPosX = if (isTypedSig) 0.01f else 0f
+                                                                val maxPosX = if (isTypedSig) 0.94f else (1f - sigWNorm).coerceAtLeast(0f)
+                                                                val minPosY = if (isTypedSig) 0.03f else 0f
+                                                                val maxPosY = if (isTypedSig) 0.98f else (1f - sigHNorm).coerceAtLeast(0f)
+                                                                val updatedX = (ann.posX + finalDrag.x).coerceIn(minPosX, maxPosX)
+                                                                val updatedY = (ann.posY + finalDrag.y).coerceIn(minPosY, maxPosY)
+                                                                viewModel.updateAnnotation(
+                                                                    ann.copy(
+                                                                        posX = updatedX,
+                                                                        posY = updatedY,
+                                                                        width = if (isTypedSig) ann.width else sigWNorm,
+                                                                        height = if (isTypedSig) ann.height else sigHNorm
+                                                                    )
+                                                                )
+                                                            },
+                                                            onDragCancel = {
+                                                                signatureDragOffsets.remove(ann.id)
+                                                            }
+                                                        )
+                                                    }
+                                            } else {
+                                                Modifier
+                                            }
+                                        )
+                                        .testTag("movable_signature_${ann.id}")
+                                )
+
+                                // Floating Resize + Delete Bar above/below selected signature
+                                if (isSelected) {
+                                    val barAbove = (ann.posY + liveDrag.y) > 0.14f
+                                    val barOffsetY = if (barAbove) (boxY - 52.dp).coerceAtLeast(4.dp) else (boxY + boxH + 4.dp)
+                                    val maxBarX = (with(density) { pageSizePx.width.toDp() } - 216.dp).coerceAtLeast(8.dp)
+                                    val barOffsetX = boxX.coerceIn(8.dp, maxBarX)
+                                    Surface(
+                                        shape = RoundedCornerShape(24.dp),
+                                        color = Color(0xF20F172A),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, AdfElectricCyan.copy(alpha = 0.7f)),
+                                        shadowElevation = 6.dp,
+                                        modifier = Modifier.offset(x = barOffsetX, y = barOffsetY)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 4.dp)
+                                        ) {
+                                            IconButton(
+                                                onClick = {
+                                                    if (isTypedSig) {
+                                                        val newSize = (textSizePx - 4f).coerceIn(14f, 64f)
+                                                        viewModel.updateAnnotation(ann.copy(strokeWidth = newSize))
+                                                    } else {
+                                                        val newW = (sigWNorm * 0.85f).coerceIn(0.14f, 0.75f)
+                                                        val newH = (sigHNorm * 0.85f).coerceIn(0.06f, 0.35f)
+                                                        viewModel.updateAnnotation(ann.copy(width = newW, height = newH))
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.Remove, contentDescription = "Shrink signature", tint = Color.White, modifier = Modifier.size(18.dp))
+                                            }
+                                            Text(
+                                                text = "Drag",
+                                                color = AdfElectricCyan,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 2.dp)
+                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    if (isTypedSig) {
+                                                        val newSize = (textSizePx + 4f).coerceIn(14f, 64f)
+                                                        viewModel.updateAnnotation(ann.copy(strokeWidth = newSize))
+                                                    } else {
+                                                        val newW = (sigWNorm * 1.18f).coerceIn(0.14f, 0.75f)
+                                                        val newH = (sigHNorm * 1.18f).coerceIn(0.06f, 0.35f)
+                                                        viewModel.updateAnnotation(ann.copy(width = newW, height = newH))
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.Add, contentDescription = "Enlarge signature", tint = Color.White, modifier = Modifier.size(18.dp))
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    viewModel.deleteAnnotation(ann.id)
+                                                    selectedSignatureAnnId = null
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete signature", tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1351,7 +1553,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "✨ 4K Ultra-Clarity Active (${String.format("%.1fx", scale)})",
+                                    text = "✨ 4K Ultra-Clarity Active (${String.format(java.util.Locale.US, "%.1fx", scale)})",
                                     color = Color.White,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold
@@ -1440,7 +1642,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (ttsIsPlaying) "Acrobat Read Aloud" else "Read Aloud Paused",
+                                text = if (ttsIsPlaying) "PDF (AIO) Read Aloud" else "Read Aloud Paused",
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                 color = CrimsonAccent
                             )
@@ -1894,7 +2096,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Choose a signature to place on the page, then tap anywhere on the document:",
+                        text = "Choose a signature and tap anywhere on the page to place it, then drag it freely to adjust:",
                         style = MaterialTheme.typography.bodySmall,
                         color = AcrobatTextSecondary
                     )
@@ -1923,16 +2125,24 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             }
                         }
                     }
+                    if (signatures.isEmpty()) {
+                        Text(
+                            text = "No saved signatures yet. Open Signature Studio to type or draw one.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AcrobatTextMuted
+                        )
+                    }
                 }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         showSignaturePicker = false
-                        viewModel.navigateTo(AppScreen.SIGNATURE_VAULT)
-                    }
+                        viewModel.showSignatureDialog(true)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)
                 ) {
-                    Text("+ Create New", color = CrimsonPrimary)
+                    Text("Signature Studio")
                 }
             },
             dismissButton = {

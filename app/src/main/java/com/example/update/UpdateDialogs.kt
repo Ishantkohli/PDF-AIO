@@ -30,6 +30,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.BuildConfig
 import com.example.ui.theme.*
+import java.util.Locale
 
 /**
  * Host overlay composable for all update dialogs and progress cards.
@@ -150,7 +151,7 @@ fun DownloadProgressDialog(
                             color = AdfTextPrimary
                         )
                         Text(
-                            text = "PDF AIO v${state.releaseInfo.versionName}",
+                            text = "PDF (AIO) v${state.releaseInfo.versionName}",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                             color = AdfTextSecondary
                         )
@@ -178,13 +179,13 @@ fun DownloadProgressDialog(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Metrics row: Downloaded / Total & Speed
-                val downloadedMb = String.format("%.1f MB", state.bytesDownloaded / (1024.0 * 1024.0))
+                val downloadedMb = String.format(Locale.US, "%.1f MB", state.bytesDownloaded / (1024.0 * 1024.0))
                 val totalMb = if (state.totalBytes > 0) {
-                    String.format("%.1f MB", state.totalBytes / (1024.0 * 1024.0))
+                    String.format(Locale.US, "%.1f MB", state.totalBytes / (1024.0 * 1024.0))
                 } else "Unknown"
 
                 val speedStr = if (state.speedKbps >= 1024) {
-                    String.format("%.1f MB/s", state.speedKbps / 1024.0)
+                    String.format(Locale.US, "%.1f MB/s", state.speedKbps / 1024.0)
                 } else {
                     "${state.speedKbps} KB/s"
                 }
@@ -281,7 +282,7 @@ fun ReadyToInstallDialog(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "PDF AIO v${releaseInfo.versionName} is ready. Tap 'Install Now' to apply the update. Once installed, the downloaded APK file will be automatically deleted.",
+                    text = "PDF (AIO) v${releaseInfo.versionName} is ready. Tap 'Install Now' to apply the update. Once installed, the downloaded APK file will be automatically deleted.",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 17.sp),
                     color = AdfTextSecondary
                 )
@@ -367,7 +368,7 @@ fun UpdateSettingsDialog(
 
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Configure the GitHub repository where PDF AIO checks for new APK releases.",
+                    text = "Configure the GitHub repository where PDF (AIO) checks for new APK releases.",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                     color = AdfTextSecondary
                 )
@@ -378,7 +379,7 @@ fun UpdateSettingsDialog(
                     value = ownerText,
                     onValueChange = { ownerText = it },
                     label = { Text("GitHub Owner / Username") },
-                    placeholder = { Text("e.g. ishantkohlikohli") },
+                    placeholder = { Text("e.g. ishantkohli") },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = AdfElectricCyan,

@@ -93,16 +93,19 @@ object UpdateManager {
                 setRequestProperty("User-Agent", "PDF-AIO-Updater/1.0 (Android)")
             }
 
-            val responseCode = connection.responseCode
-            if (responseCode == 404) {
-                Log.w(TAG, "No releases found on repository $owner/$repo (404)")
-                return@withContext Result.failure(Exception("No published releases found on GitHub ($owner/$repo)"))
+            val responseBody = try {
+                val responseCode = connection.responseCode
+                if (responseCode == 404) {
+                    Log.w(TAG, "No releases found on repository $owner/$repo (404)")
+                    return@withContext Result.failure(Exception("No published releases found on GitHub ($owner/$repo)"))
+                }
+                if (responseCode != HttpURLConnection.HTTP_OK) {
+                    return@withContext Result.failure(Exception("GitHub API returned error code $responseCode: ${connection.responseMessage}"))
+                }
+                connection.inputStream.bufferedReader().use { it.readText() }
+            } finally {
+                try { connection.disconnect() } catch (_: Exception) {}
             }
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                return@withContext Result.failure(Exception("GitHub API returned error code $responseCode: ${connection.responseMessage}"))
-            }
-
-            val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
             val json = JSONObject(responseBody)
 
             val tagName = json.optString("tag_name", "").trim()
@@ -199,6 +202,10 @@ object UpdateManager {
             var currentUrl = releaseInfo.downloadUrl
             var redirectCount = 0
 
+            if (!currentUrl.startsWith("https://", ignoreCase = true)) {
+                return@withContext Result.failure(Exception("Blocked non-HTTPS update URL"))
+            }
+
             // Follow HTTP redirects (GitHub releases assets redirect to S3 storage)
             while (redirectCount < 5) {
                 val url = URL(currentUrl)
@@ -217,13 +224,23 @@ object UpdateManager {
                 ) {
                     val newUrl = connection.getHeaderField("Location")
                     if (newUrl != null) {
-                        currentUrl = newUrl
+                        val resolvedUrl = URL(url, newUrl).toString()
+                        if (!resolvedUrl.startsWith("https://", ignoreCase = true)) {
+                            connection.disconnect()
+                            return@withContext Result.failure(Exception("Blocked insecure redirect protocol"))
+                        }
+                        currentUrl = resolvedUrl
                         redirectCount++
                         connection.disconnect()
                         continue
                     }
                 }
                 break
+            }
+
+            val finalStatus = connection?.responseCode ?: -1
+            if (finalStatus !in 200..299) {
+                return@withContext Result.failure(Exception("Download server returned HTTP $finalStatus"))
             }
 
             val totalBytes = connection?.contentLengthLong ?: releaseInfo.apkSize

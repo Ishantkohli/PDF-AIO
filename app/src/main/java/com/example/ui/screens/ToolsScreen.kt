@@ -143,6 +143,16 @@ fun ToolsScreen(viewModel: PdfViewModel) {
                     onClick = { selectedToolTab = 7 },
                     text = { Text("Compress PDF", fontWeight = if (selectedToolTab == 7) FontWeight.Bold else FontWeight.Normal) }
                 )
+                Tab(
+                    selected = selectedToolTab == 8,
+                    onClick = { selectedToolTab = 8 },
+                    text = { Text("PDF to TXT", fontWeight = if (selectedToolTab == 8) FontWeight.Bold else FontWeight.Normal) }
+                )
+                Tab(
+                    selected = selectedToolTab == 9,
+                    onClick = { selectedToolTab = 9 },
+                    text = { Text("TXT to PDF", fontWeight = if (selectedToolTab == 9) FontWeight.Bold else FontWeight.Normal) }
+                )
             }
 
             when (selectedToolTab) {
@@ -154,6 +164,8 @@ fun ToolsScreen(viewModel: PdfViewModel) {
                 5 -> MergePdfsTab(viewModel = viewModel, documents = documents)
                 6 -> OrganizePagesTab(viewModel = viewModel, documents = documents, currentDoc = currentDoc)
                 7 -> com.example.ui.screens.tools.PdfCompressorTab(viewModel = viewModel, documents = documents, currentDoc = currentDoc)
+                8 -> PdfToTxtTab(viewModel = viewModel, documents = documents)
+                9 -> TxtToPdfTab(viewModel = viewModel)
             }
         }
     }

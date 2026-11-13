@@ -39,7 +39,7 @@ enum class AppScreen {
     CREDITS,
     PDF_DIFF,
     FEEDBACK,
-    PPT_VIEWER
+    TXT_VIEWER
 }
 
 enum class AnnotationTool {
@@ -107,76 +107,87 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         _isPureViewerMode.value = isViewerOnly
     }
 
-    // PowerPoint / Presentation State
-    private val _currentPresentation = MutableStateFlow<com.example.data.pdf.PptPresentation?>(null)
-    val currentPresentation: StateFlow<com.example.data.pdf.PptPresentation?> = _currentPresentation.asStateFlow()
+    // TXT Viewer State
+    data class TxtDocumentState(
+        val title: String,
+        val uri: Uri,
+        val lines: List<String>,
+        val fileSizeBytes: Long,
+        val fullText: String
+    )
 
-    private val _presentationSlideIndex = MutableStateFlow(0)
-    val presentationSlideIndex: StateFlow<Int> = _presentationSlideIndex.asStateFlow()
+    private val _currentTxtDocument = MutableStateFlow<TxtDocumentState?>(null)
+    val currentTxtDocument: StateFlow<TxtDocumentState?> = _currentTxtDocument.asStateFlow()
 
-    private val _isPresentationSlideshowMode = MutableStateFlow(false)
-    val isPresentationSlideshowMode: StateFlow<Boolean> = _isPresentationSlideshowMode.asStateFlow()
-
-    private val _laserPointerActive = MutableStateFlow(false)
-    val laserPointerActive: StateFlow<Boolean> = _laserPointerActive.asStateFlow()
-
-    private val _showSpeakerNotes = MutableStateFlow(false)
-    val showSpeakerNotes: StateFlow<Boolean> = _showSpeakerNotes.asStateFlow()
-
-    fun openPowerPointPresentation(pptUri: Uri, title: String) {
-        viewModelScope.launch {
-            _statusMessage.value = "Parsing PowerPoint Presentation..."
+    fun openTxtDocument(txtUri: Uri, title: String = "Text Document") {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
             try {
-                val presentation = com.example.data.pdf.DocumentConverterEngine.parsePowerPointPresentation(
-                    context = getApplication(),
-                    pptUri = pptUri,
-                    docTitle = title
+                var resolvedTitle = title
+                var resolvedSize = 0L
+                context.contentResolver.query(txtUri, null, null, null, null)?.use { cursor ->
+                    val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (cursor.moveToFirst()) {
+                        if (nameIdx != -1) resolvedTitle = cursor.getString(nameIdx) ?: resolvedTitle
+                        if (sizeIdx != -1) resolvedSize = cursor.getLong(sizeIdx)
+                    }
+                }
+                if (resolvedSize <= 0L && txtUri.scheme == "file") {
+                    txtUri.path?.let { p ->
+                        val f = File(p)
+                        if (f.exists()) resolvedSize = f.length()
+                    }
+                }
+
+                val rawBytes = context.contentResolver.openInputStream(txtUri)?.use { it.readBytes() }
+                    ?: throw IllegalStateException("Unable to read text file")
+                if (resolvedSize <= 0L) resolvedSize = rawBytes.size.toLong()
+
+                val text = when {
+                    rawBytes.size >= 3 && (rawBytes[0].toInt() and 0xFF) == 0xEF &&
+                        (rawBytes[1].toInt() and 0xFF) == 0xBB && (rawBytes[2].toInt() and 0xFF) == 0xBF ->
+                        String(rawBytes, 3, rawBytes.size - 3, Charsets.UTF_8)
+                    rawBytes.size >= 2 && (rawBytes[0].toInt() and 0xFF) == 0xFF &&
+                        (rawBytes[1].toInt() and 0xFF) == 0xFE ->
+                        String(rawBytes, 2, rawBytes.size - 2, Charsets.UTF_16LE)
+                    rawBytes.size >= 2 && (rawBytes[0].toInt() and 0xFF) == 0xFE &&
+                        (rawBytes[1].toInt() and 0xFF) == 0xFF ->
+                        String(rawBytes, 2, rawBytes.size - 2, Charsets.UTF_16BE)
+                    else -> String(rawBytes, Charsets.UTF_8)
+                }.replace("\r\n", "\n").replace('\r', '\n')
+
+                val lines = text.split('\n')
+                val state = TxtDocumentState(
+                    title = resolvedTitle.ifBlank { "Document.txt" },
+                    uri = txtUri,
+                    lines = lines,
+                    fileSizeBytes = resolvedSize,
+                    fullText = text
                 )
-                _currentPresentation.value = presentation
-                _presentationSlideIndex.value = 0
-                _isPresentationSlideshowMode.value = false
-                _laserPointerActive.value = false
-                _showSpeakerNotes.value = false
-                _currentScreen.value = AppScreen.PPT_VIEWER
-                _statusMessage.value = "Presentation loaded (${presentation.totalSlides} slides)"
+                withContext(Dispatchers.Main) {
+                    _currentTxtDocument.value = state
+                    _currentScreen.value = AppScreen.TXT_VIEWER
+                }
             } catch (e: Exception) {
-                android.util.Log.e("PdfViewModel", "Failed to parse PPT presentation", e)
-                _statusMessage.value = "Could not open PowerPoint file: ${e.message}"
+                android.util.Log.e("PdfViewModel", "Failed to open TXT file", e)
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Could not open TXT file: ${e.localizedMessage ?: "Access denied"}"
+                }
             }
         }
     }
 
-    fun closePresentation() {
-        _currentPresentation.value = null
-        _isPresentationSlideshowMode.value = false
-        _laserPointerActive.value = false
-        _showSpeakerNotes.value = false
+    fun closeTxtDocument() {
+        _currentTxtDocument.value = null
         _currentScreen.value = AppScreen.HOME
     }
 
-    fun setPresentationSlideIndex(index: Int) {
-        val maxIdx = (_currentPresentation.value?.slides?.size ?: 1) - 1
-        _presentationSlideIndex.value = index.coerceIn(0, maxIdx.coerceAtLeast(0))
-    }
-
-    fun nextPresentationSlide() {
-        setPresentationSlideIndex(_presentationSlideIndex.value + 1)
-    }
-
-    fun prevPresentationSlide() {
-        setPresentationSlideIndex(_presentationSlideIndex.value - 1)
-    }
-
-    fun togglePresentationSlideshow() {
-        _isPresentationSlideshowMode.value = !_isPresentationSlideshowMode.value
-    }
-
-    fun toggleLaserPointer() {
-        _laserPointerActive.value = !_laserPointerActive.value
-    }
-
-    fun toggleSpeakerNotes() {
-        _showSpeakerNotes.value = !_showSpeakerNotes.value
+    fun convertTxtDocumentToPdf(
+        txtState: TxtDocumentState,
+        onDone: (DocumentEntity?) -> Unit = {}
+    ) {
+        convertTxtUriToPdf(txtState.uri, txtState.title, onDone)
     }
 
     // Device Document Files (PDFs, Word .docx, .doc)
@@ -222,57 +233,15 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
     fun openDeviceFile(fileItem: com.example.data.local.DeviceFileItem, pureViewer: Boolean = false) {
         viewModelScope.launch {
             _isPureViewerMode.value = pureViewer
-            val context = getApplication<Application>()
             when (fileItem.fileType) {
                 com.example.data.local.DeviceFileType.PDF -> {
                     importPdfFromUri(fileItem.uri)
                 }
-                com.example.data.local.DeviceFileType.WORD_DOCX,
-                com.example.data.local.DeviceFileType.WORD_DOC -> {
-                    _statusMessage.value = "Opening Word document..."
-                    try {
-                        val convertedPdf = File(context.cacheDir, "word_${System.currentTimeMillis()}_${fileItem.title.replace(" ", "_")}.pdf")
-                        val success = DocumentConverterEngine.convertWordToPdf(
-                            context = context,
-                            wordUri = fileItem.uri,
-                            outputFile = convertedPdf,
-                            docTitle = fileItem.title
-                        )
-                        if (success && convertedPdf.exists() && convertedPdf.length() > 0) {
-                            importPdfFromUri(Uri.fromFile(convertedPdf))
-                        } else {
-                            _statusMessage.value = "Could not convert Word document"
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("PdfViewModel", "Failed to open Word file", e)
-                        _statusMessage.value = "Error opening Word document: ${e.message}"
-                    }
-                }
-                com.example.data.local.DeviceFileType.POWERPOINT -> {
-                    openPowerPointPresentation(fileItem.uri, fileItem.title)
-                }
                 com.example.data.local.DeviceFileType.TEXT -> {
-                    _statusMessage.value = "Opening text document..."
-                    try {
-                        val convertedPdf = File(context.cacheDir, "txt_${System.currentTimeMillis()}_${fileItem.title.replace(" ", "_")}.pdf")
-                        val success = DocumentConverterEngine.convertTxtToPdf(
-                            context = context,
-                            txtUri = fileItem.uri,
-                            outputFile = convertedPdf,
-                            docTitle = fileItem.title
-                        )
-                        if (success && convertedPdf.exists() && convertedPdf.length() > 0) {
-                            importPdfFromUri(Uri.fromFile(convertedPdf))
-                        } else {
-                            _statusMessage.value = "Could not convert text file"
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("PdfViewModel", "Failed to open Text file", e)
-                        _statusMessage.value = "Error opening text document: ${e.message}"
-                    }
+                    openTxtDocument(fileItem.uri, fileItem.title)
                 }
                 else -> {
-                    importPdfFromUri(fileItem.uri)
+                    _statusMessage.value = "Only PDF and TXT files open in the viewer. Use Converter for other formats."
                 }
             }
         }
@@ -433,11 +402,6 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            if (matches.isEmpty() && query.length >= 2) {
-                // Fallback to match first page for broad terms
-                matches.add(0)
-            }
-
             withContext(Dispatchers.Main) {
                 _searchResults.value = matches
                 _currentSearchMatchIndex.value = 0
@@ -448,41 +412,29 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var cachedExtractedPath: String? = null
+    private var cachedExtractedPages: List<com.example.data.pdf.PdfTextExtractor.ExtractedPage> = emptyList()
+
+    private fun countPdfPagesSafely(file: File): Int {
+        return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
+            android.graphics.pdf.PdfRenderer(pfd).use { renderer ->
+                renderer.pageCount
+            }
+        }
+    }
+
     private fun extractPdfPageText(file: File, pageIndex: Int): String {
-        val sb = StringBuilder()
-        try {
-            val bytes = file.readBytes()
-            val content = String(bytes, Charsets.ISO_8859_1)
-
-            val streamRegex = Regex("""stream[\r\n]+([\s\S]*?)[\r\n]+endstream""", RegexOption.IGNORE_CASE)
-            val textStringRegex = Regex("""\((.*?)\)\s*Tj""", RegexOption.IGNORE_CASE)
-            val arrayTextRegex = Regex("""\[(.*?)\]\s*TJ""", RegexOption.IGNORE_CASE)
-
-            val streams = streamRegex.findAll(content).toList()
-            val targetStream = if (streams.isNotEmpty() && pageIndex < streams.size) {
-                streams[pageIndex].groupValues[1]
-            } else {
-                content
+        return try {
+            val cacheKey = "${file.absolutePath}_${file.lastModified()}"
+            if (cachedExtractedPath != cacheKey) {
+                cachedExtractedPages = com.example.data.pdf.PdfTextExtractor.extractPages(file)
+                cachedExtractedPath = cacheKey
             }
-
-            for (m in textStringRegex.findAll(targetStream)) {
-                val raw = m.groupValues[1]
-                val cleaned = raw.replace("\\(", "(").replace("\\)", ")").replace("\\\\", "\\")
-                sb.append(cleaned).append(" ")
-            }
-
-            for (m in arrayTextRegex.findAll(targetStream)) {
-                val rawArr = m.groupValues[1]
-                val innerMatches = Regex("""\((.*?)\)""").findAll(rawArr)
-                for (im in innerMatches) {
-                    val cleaned = im.groupValues[1].replace("\\(", "(").replace("\\)", ")").replace("\\\\", "\\")
-                    sb.append(cleaned).append(" ")
-                }
-            }
+            cachedExtractedPages.getOrNull(pageIndex)?.fullText ?: ""
         } catch (e: Exception) {
             android.util.Log.e("PdfViewModel", "Failed to extract text from page $pageIndex", e)
+            ""
         }
-        return sb.toString()
     }
 
     fun nextSearchMatch() {
@@ -582,21 +534,22 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                // Check if incoming URI is a Word, PowerPoint, or Text file and convert to PDF automatically
+                // Route TXT files directly to TXT Viewer; keep only PDFs for PDF Reader
                 val lowerTitle = title.lowercase()
-                if (lowerTitle.endsWith(".docx") || lowerTitle.endsWith(".doc")) {
-                    val convertedPdf = File(context.cacheDir, "imp_word_${System.currentTimeMillis()}.pdf")
-                    if (DocumentConverterEngine.convertWordToPdf(context, uri, convertedPdf, title)) {
-                        return@launch importPdfFromUri(Uri.fromFile(convertedPdf))
-                    }
-                } else if (lowerTitle.endsWith(".pptx") || lowerTitle.endsWith(".ppt")) {
-                    openPowerPointPresentation(uri, title)
+                val mimeType = context.contentResolver.getType(uri)?.lowercase() ?: ""
+                if (lowerTitle.endsWith(".txt") || mimeType == "text/plain") {
+                    openTxtDocument(uri, title)
                     return@launch
-                } else if (lowerTitle.endsWith(".txt") || lowerTitle.endsWith(".rtf")) {
-                    val convertedPdf = File(context.cacheDir, "imp_txt_${System.currentTimeMillis()}.pdf")
-                    if (DocumentConverterEngine.convertTxtToPdf(context, uri, convertedPdf, title)) {
-                        return@launch importPdfFromUri(Uri.fromFile(convertedPdf))
+                } else if (
+                    lowerTitle.endsWith(".docx") || lowerTitle.endsWith(".doc") ||
+                    lowerTitle.endsWith(".pptx") || lowerTitle.endsWith(".ppt") ||
+                    lowerTitle.endsWith(".xlsx") || lowerTitle.endsWith(".xls") ||
+                    lowerTitle.endsWith(".rtf")
+                ) {
+                    withContext(Dispatchers.Main) {
+                        _statusMessage.value = "Only PDF & TXT viewers are enabled. Use Converter tab to convert Word files to PDF."
                     }
+                    return@launch
                 }
 
                 val docsDir = File(context.filesDir, "imported_pdfs")
@@ -612,11 +565,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (destFile.exists() && destFile.length() > 0) {
-                    val pfd = ParcelFileDescriptor.open(destFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                    val renderer = android.graphics.pdf.PdfRenderer(pfd)
-                    val pages = renderer.pageCount
-                    renderer.close()
-                    pfd.close()
+                    val pages = countPdfPagesSafely(destFile)
 
                     val newDoc = DocumentEntity(
                         uriString = Uri.fromFile(destFile).toString(),
@@ -645,11 +594,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
     fun registerScannedPdf(pdfFile: File, title: String, onRegistered: (DocumentEntity) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = android.graphics.pdf.PdfRenderer(pfd)
-                val pages = renderer.pageCount
-                renderer.close()
-                pfd.close()
+                val pages = countPdfPagesSafely(pdfFile)
 
                 val newDoc = DocumentEntity(
                     uriString = Uri.fromFile(pdfFile).toString(),
@@ -955,11 +900,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
             )
 
             if (success) {
-                val pfd = ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = android.graphics.pdf.PdfRenderer(pfd)
-                val pages = renderer.pageCount
-                renderer.close()
-                pfd.close()
+                val pages = countPdfPagesSafely(outFile)
 
                 val newDoc = DocumentEntity(
                     uriString = Uri.fromFile(outFile).toString(),
@@ -1006,11 +947,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
             )
 
             if (success) {
-                val pfd = ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = android.graphics.pdf.PdfRenderer(pfd)
-                val pages = renderer.pageCount
-                renderer.close()
-                pfd.close()
+                val pages = countPdfPagesSafely(outFile)
 
                 val newDoc = DocumentEntity(
                     uriString = Uri.fromFile(outFile).toString(),
@@ -1065,6 +1002,81 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun convertPdfToTxt(
+        doc: DocumentEntity,
+        onDone: (File?) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val docsDir = File(context.filesDir, "txt_exports").apply { if (!exists()) mkdirs() }
+            val cleanTitle = doc.title.replace(".pdf", "").replace(" ", "_")
+            val outFile = File(docsDir, "${cleanTitle}_converted.txt")
+            val sourceFile = File(doc.filePath)
+
+            val success = DocumentConverterEngine.convertPdfToTxt(
+                pdfFile = sourceFile,
+                outputTxtFile = outFile,
+                docTitle = cleanTitle
+            )
+
+            withContext(Dispatchers.Main) {
+                if (success) {
+                    _statusMessage.value = "Converted PDF to TXT!"
+                    onDone(outFile)
+                } else {
+                    _statusMessage.value = "Failed to convert PDF to TXT"
+                    onDone(null)
+                }
+            }
+        }
+    }
+
+    fun convertTxtUriToPdf(
+        txtUri: Uri,
+        docTitle: String,
+        onDone: (DocumentEntity?) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val docsDir = File(context.filesDir, "txt_converted_pdfs").apply { if (!exists()) mkdirs() }
+            val cleanTitle = docTitle.ifBlank { "Text_Document" }
+                .replace(".txt", "", ignoreCase = true)
+                .replace(" ", "_")
+            val outFile = File(docsDir, "${cleanTitle}_${System.currentTimeMillis()}.pdf")
+
+            val success = DocumentConverterEngine.convertTxtToPdf(
+                context = context,
+                txtUri = txtUri,
+                outputFile = outFile,
+                docTitle = cleanTitle
+            )
+
+            if (success) {
+                val pages = countPdfPagesSafely(outFile)
+
+                val newDoc = DocumentEntity(
+                    uriString = Uri.fromFile(outFile).toString(),
+                    title = cleanTitle,
+                    filePath = outFile.absolutePath,
+                    pageCount = pages,
+                    fileSizeBytes = outFile.length()
+                )
+                val id = dao.insertDocument(newDoc)
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Converted TXT to $pages-page PDF!"
+                    val inserted = newDoc.copy(id = id)
+                    openDocument(inserted)
+                    onDone(inserted)
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Failed to convert TXT to PDF"
+                    onDone(null)
+                }
+            }
+        }
+    }
+
     fun stampWatermarkOnDocument(
         doc: DocumentEntity,
         options: DocumentConverterEngine.WatermarkOptions,
@@ -1084,11 +1096,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
             )
 
             if (success) {
-                val pfd = ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = android.graphics.pdf.PdfRenderer(pfd)
-                val pages = renderer.pageCount
-                renderer.close()
-                pfd.close()
+                val pages = countPdfPagesSafely(outFile)
 
                 val newDoc = DocumentEntity(
                     uriString = Uri.fromFile(outFile).toString(),
@@ -1139,11 +1147,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
 
             val success = PdfExportEngine.convertImagesToPdf(context, imageUris, outFile)
             if (success) {
-                val pfd = ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = android.graphics.pdf.PdfRenderer(pfd)
-                val pages = renderer.pageCount
-                renderer.close()
-                pfd.close()
+                val pages = countPdfPagesSafely(outFile)
 
                 val newDoc = DocumentEntity(
                     uriString = Uri.fromFile(outFile).toString(),
@@ -1179,11 +1183,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
             val files = docsToMerge.map { File(it.filePath) }
             val success = PdfExportEngine.mergePdfs(files, outFile)
             if (success) {
-                val pfd = ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = android.graphics.pdf.PdfRenderer(pfd)
-                val pages = renderer.pageCount
-                renderer.close()
-                pfd.close()
+                val pages = countPdfPagesSafely(outFile)
 
                 val newDoc = DocumentEntity(
                     uriString = Uri.fromFile(outFile).toString(),
@@ -1225,11 +1225,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
 
             val success = PdfExportEngine.mergePdfsFromUris(context, pdfItems, outFile, insertSeparators)
             if (success) {
-                val pfd = ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = android.graphics.pdf.PdfRenderer(pfd)
-                val pages = renderer.pageCount
-                renderer.close()
-                pfd.close()
+                val pages = countPdfPagesSafely(outFile)
 
                 val newDoc = DocumentEntity(
                     uriString = Uri.fromFile(outFile).toString(),
@@ -1260,6 +1256,20 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         newTitle: String,
         onDone: () -> Unit
     ) {
+        organizeDocumentPagesWithRotations(
+            doc = doc,
+            orderedPages = includedIndices.map { idx -> idx to (rotations[idx] ?: 0) },
+            newTitle = newTitle,
+            onDone = onDone
+        )
+    }
+
+    fun organizeDocumentPagesWithRotations(
+        doc: DocumentEntity,
+        orderedPages: List<Pair<Int, Int>>,
+        newTitle: String,
+        onDone: () -> Unit
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             val context = getApplication<Application>()
             val docsDir = File(context.filesDir, "organized_pdfs")
@@ -1269,13 +1279,9 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
             val outFile = File(docsDir, "${cleanTitle.replace(' ', '_')}.pdf")
             val source = File(doc.filePath)
 
-            val success = PdfExportEngine.organizePages(source, includedIndices, rotations, outFile)
+            val success = PdfExportEngine.organizePagesWithRotations(source, orderedPages, outFile)
             if (success) {
-                val pfd = ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = android.graphics.pdf.PdfRenderer(pfd)
-                val pages = renderer.pageCount
-                renderer.close()
-                pfd.close()
+                val pages = countPdfPagesSafely(outFile)
 
                 val newDoc = DocumentEntity(
                     uriString = Uri.fromFile(outFile).toString(),
@@ -1348,6 +1354,20 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         newTitle: String,
         onDone: () -> Unit
     ) {
+        extractPagesWithRotations(
+            doc = doc,
+            orderedPages = includedIndices.map { idx -> idx to (rotations[idx] ?: 0) },
+            newTitle = newTitle,
+            onDone = onDone
+        )
+    }
+
+    fun extractPagesWithRotations(
+        doc: DocumentEntity,
+        orderedPages: List<Pair<Int, Int>>,
+        newTitle: String,
+        onDone: () -> Unit
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             val context = getApplication<Application>()
             val docsDir = File(context.filesDir, "extracted_pdfs")
@@ -1357,13 +1377,9 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
             val outFile = File(docsDir, "${cleanTitle.replace(' ', '_')}.pdf")
             val source = File(doc.filePath)
 
-            val success = PdfExportEngine.organizePages(source, includedIndices, rotations, outFile)
+            val success = PdfExportEngine.organizePagesWithRotations(source, orderedPages, outFile)
             if (success) {
-                val pfd = ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = android.graphics.pdf.PdfRenderer(pfd)
-                val pages = renderer.pageCount
-                renderer.close()
-                pfd.close()
+                val pages = countPdfPagesSafely(outFile)
 
                 val newDoc = DocumentEntity(
                     uriString = Uri.fromFile(outFile).toString(),
@@ -1428,7 +1444,9 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                 colorHex = colorHex,
                 strokeWidth = 26f,
                 posX = posX,
-                posY = posY
+                posY = posY,
+                width = if (isTyped) 0f else 0.30f,
+                height = if (isTyped) 0f else 0.12f
             )
             val id = dao.insertAnnotation(annotation)
             _currentAnnotations.value = _currentAnnotations.value + annotation.copy(id = id)
@@ -1451,16 +1469,24 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startReadAloud(customText: String? = null) {
         val doc = _currentDocument.value ?: return
-        val textToSpeak = customText ?: run {
-            if (doc.title.contains("NDA", ignoreCase = true)) {
-                "Mutual Non-Disclosure Agreement. Entered into on October 14, 2026, by and between AcroTech Solutions and Recipient. Section 1: Purpose of Disclosure. The parties intend to explore a strategic partnership regarding Cloud Document Technologies."
-            } else if (doc.title.contains("Whitepaper", ignoreCase = true)) {
-                "Technical Whitepaper: Intelligent Document Processing Architecture. Modern enterprise workflows demand zero latency on-device processing combined with multimodal intelligence."
-            } else {
-                "Reading document: ${doc.title}. Page ${_currentPage.value + 1} of ${_totalPages.value}."
+        val pageIdx = _currentPage.value
+        val total = _totalPages.value
+        if (!customText.isNullOrBlank()) {
+            ttsManager.speak(customText)
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val pdfFile = File(doc.filePath)
+            val extracted = if (pdfFile.exists() && pdfFile.length() > 0L) {
+                extractPdfPageText(pdfFile, pageIdx).trim()
+            } else ""
+            val textToSpeak = extracted.ifBlank {
+                "Reading document: ${doc.title}. Page ${pageIdx + 1} of $total. This page appears to be an image or scanned sheet without embedded text."
+            }
+            withContext(Dispatchers.Main) {
+                ttsManager.speak(textToSpeak)
             }
         }
-        ttsManager.speak(textToSpeak)
     }
 
     fun stopReadAloud() {

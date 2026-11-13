@@ -1,12 +1,9 @@
 package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -15,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,7 +25,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,8 +34,18 @@ import com.example.ui.PdfViewModel
 import com.example.ui.theme.*
 
 /**
- * Acrobat Page Manager Screen (Elite/Crazy Level)
- * Complete page organization studio: Reorder, Move to Top/End, Rotate (90/180/270),
+ * Unique identity per arranged page slot so duplicating, rotating, moving,
+ * inserting blank/notes pages, and batch-deleting never collide on originalIndex.
+ */
+private data class ManagedPageItem(
+    val uid: Long,
+    val originalIndex: Int, // -1 = Blank Page, -2 = Notes Page
+    val rotationDegrees: Int = 0
+)
+
+/**
+ * PDF (AIO) Page Manager Screen
+ * Page organization studio: Reorder, Move Earlier/Later, Rotate (90/180/270),
  * Duplicate, Insert Blank/Notes Page, Multi-Select Batch Actions, Extract to new PDF,
  * 2/3 column layout toggle, and Instant Reset.
  */
@@ -50,22 +57,18 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
 
     val totalOriginalPages = currentDoc?.pageCount ?: 0
 
-    // List of page indices in current layout.
-    // -1 represents an inserted Blank Page, -2 represents an inserted Notes Page.
-    val pageOrder = remember(currentDoc) {
-        mutableStateListOf<Int>().apply {
-            for (i in 0 until totalOriginalPages) add(i)
+    var nextUid by remember(currentDoc) { mutableLongStateOf(totalOriginalPages.toLong() + 1L) }
+
+    val pageItems = remember(currentDoc) {
+        mutableStateListOf<ManagedPageItem>().apply {
+            for (i in 0 until totalOriginalPages) {
+                add(ManagedPageItem(uid = i.toLong(), originalIndex = i, rotationDegrees = 0))
+            }
         }
     }
 
-    // Map of position in pageOrder -> rotation angle (0, 90, 180, 270)
-    val pageRotations = remember(currentDoc) {
-        mutableStateMapOf<Int, Int>()
-    }
-
-    // Multi-select state
-    val selectedPositions = remember { mutableStateListOf<Int>() }
-    var isMultiSelectMode by remember { mutableStateOf(false) }
+    val selectedUids = remember(currentDoc) { mutableStateListOf<Long>() }
+    var isMultiSelectMode by remember(currentDoc) { mutableStateOf(false) }
 
     // Grid layout: 2 columns vs 3 columns
     var gridColumns by remember { mutableIntStateOf(2) }
@@ -86,18 +89,22 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
         viewModel.navigateTo(AppScreen.READER)
     }
 
+    val selectedPositionSingle: Int? = if (selectedUids.size == 1) {
+        pageItems.indexOfFirst { it.uid == selectedUids.first() }.takeIf { it >= 0 }
+    } else null
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
                         Text(
-                            text = if (isMultiSelectMode) "${selectedPositions.size} Selected" else "Page Manager",
+                            text = if (isMultiSelectMode) "${selectedUids.size} Selected" else "Page Manager",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = AcrobatTextPrimary
                         )
                         Text(
-                            text = "${pageOrder.size} pages • ${currentDoc?.title ?: "Document"}",
+                            text = "${pageItems.size} pages • ${currentDoc?.title ?: "Document"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = AcrobatTextSecondary,
                             maxLines = 1,
@@ -110,7 +117,7 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                         onClick = {
                             if (isMultiSelectMode) {
                                 isMultiSelectMode = false
-                                selectedPositions.clear()
+                                selectedUids.clear()
                             } else {
                                 viewModel.navigateTo(AppScreen.READER)
                             }
@@ -125,13 +132,13 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                     }
                 },
                 actions = {
-                    // Reset to Original Order & Rotations
                     IconButton(
                         onClick = {
-                            pageOrder.clear()
-                            for (i in 0 until totalOriginalPages) pageOrder.add(i)
-                            pageRotations.clear()
-                            selectedPositions.clear()
+                            pageItems.clear()
+                            for (i in 0 until totalOriginalPages) {
+                                pageItems.add(ManagedPageItem(uid = nextUid++, originalIndex = i, rotationDegrees = 0))
+                            }
+                            selectedUids.clear()
                             isMultiSelectMode = false
                         },
                         modifier = Modifier.testTag("reset_pages_button")
@@ -143,11 +150,10 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                         )
                     }
 
-                    // Multi-select mode toggle
                     IconButton(
                         onClick = {
                             isMultiSelectMode = !isMultiSelectMode
-                            if (!isMultiSelectMode) selectedPositions.clear()
+                            if (!isMultiSelectMode) selectedUids.clear()
                         },
                         modifier = Modifier.testTag("multi_select_toggle_button")
                     ) {
@@ -158,22 +164,20 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                         )
                     }
 
-                    // Save & Apply Button (Acrobat Crimson Signature Red Accent)
                     Button(
                         onClick = {
                             val doc = currentDoc ?: return@Button
-                            if (pageOrder.isEmpty()) return@Button
+                            if (pageItems.isEmpty()) return@Button
                             isSaving = true
-                            viewModel.organizeDocumentPages(
+                            viewModel.organizeDocumentPagesWithRotations(
                                 doc = doc,
-                                includedIndices = pageOrder.toList(),
-                                rotations = pageRotations.toMap(),
+                                orderedPages = pageItems.map { it.originalIndex to it.rotationDegrees },
                                 newTitle = "${doc.title}_organized"
                             ) {
                                 isSaving = false
                             }
                         },
-                        enabled = pageOrder.isNotEmpty() && !isSaving,
+                        enabled = pageItems.isNotEmpty() && !isSaving,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = CrimsonPrimary,
                             contentColor = Color.White
@@ -199,7 +203,6 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
             )
         },
         bottomBar = {
-            // Acrobat Crimson Bottom Action Dock
             Surface(
                 color = AcrobatDarkSurfaceElevated,
                 border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(AcrobatDarkBorder)),
@@ -208,55 +211,42 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                     .navigationBarsPadding()
             ) {
                 Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                    // Action Buttons Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // Move to Top / Earlier
+                        val canMoveEarlier = selectedPositionSingle != null && selectedPositionSingle > 0
                         IconButton(
                             onClick = {
-                                if (selectedPositions.size == 1) {
-                                    val idx = selectedPositions.first()
-                                    if (idx > 0) {
-                                        val item = pageOrder.removeAt(idx)
-                                        val rot = pageRotations.remove(item)
-                                        pageOrder.add(idx - 1, item)
-                                        if (rot != null) pageRotations[item] = rot
-                                        selectedPositions.clear()
-                                        selectedPositions.add(idx - 1)
-                                    }
+                                val idx = selectedPositionSingle ?: return@IconButton
+                                if (idx > 0) {
+                                    val item = pageItems.removeAt(idx)
+                                    pageItems.add(idx - 1, item)
                                 }
                             },
-                            enabled = selectedPositions.size == 1 && selectedPositions.first() > 0,
+                            enabled = canMoveEarlier,
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(if (selectedPositions.size == 1 && selectedPositions.first() > 0) CrimsonPrimary else AcrobatDarkSurfaceVariant)
+                                .background(if (canMoveEarlier) CrimsonPrimary else AcrobatDarkSurfaceVariant)
                                 .testTag("move_page_earlier_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ArrowBack,
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Move Earlier",
-                                tint = if (selectedPositions.size == 1 && selectedPositions.first() > 0) Color.White else AcrobatTextMuted,
+                                tint = if (canMoveEarlier) Color.White else AcrobatTextMuted,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
 
-                        // Rotate 90° Button (Rotates selected or all)
                         Button(
                             onClick = {
-                                if (selectedPositions.isNotEmpty()) {
-                                    for (pos in selectedPositions) {
-                                        val pageItem = pageOrder[pos]
-                                        val cur = pageRotations[pageItem] ?: 0
-                                        pageRotations[pageItem] = (cur + 90) % 360
-                                    }
-                                } else {
-                                    for (pageItem in pageOrder) {
-                                        val cur = pageRotations[pageItem] ?: 0
-                                        pageRotations[pageItem] = (cur + 90) % 360
+                                val uidSet = selectedUids.toSet()
+                                for (i in pageItems.indices) {
+                                    val item = pageItems[i]
+                                    if (uidSet.isEmpty() || uidSet.contains(item.uid)) {
+                                        pageItems[i] = item.copy(rotationDegrees = (item.rotationDegrees + 90) % 360)
                                     }
                                 }
                             },
@@ -271,112 +261,101 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                             Icon(Icons.AutoMirrored.Filled.RotateRight, contentDescription = "Rotate", modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (selectedPositions.isNotEmpty()) "Rotate (${selectedPositions.size})" else "Rotate All 90°",
+                                text = if (selectedUids.isNotEmpty()) "Rotate (${selectedUids.size})" else "Rotate All 90°",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
                             )
                         }
 
-                        // Duplicate Button
                         IconButton(
                             onClick = {
-                                if (selectedPositions.size == 1) {
-                                    val idx = selectedPositions.first()
-                                    val item = pageOrder[idx]
-                                    pageOrder.add(idx + 1, item)
-                                    selectedPositions.clear()
-                                    selectedPositions.add(idx + 1)
-                                }
+                                val idx = selectedPositionSingle ?: return@IconButton
+                                val item = pageItems[idx]
+                                val copyItem = item.copy(uid = nextUid++)
+                                pageItems.add(idx + 1, copyItem)
+                                selectedUids.clear()
+                                selectedUids.add(copyItem.uid)
                             },
-                            enabled = selectedPositions.size == 1,
+                            enabled = selectedPositionSingle != null,
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(if (selectedPositions.size == 1) CrimsonPrimary else AcrobatDarkSurfaceVariant)
+                                .background(if (selectedPositionSingle != null) CrimsonPrimary else AcrobatDarkSurfaceVariant)
                                 .testTag("duplicate_page_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ContentCopy,
                                 contentDescription = "Duplicate Page",
-                                tint = if (selectedPositions.size == 1) Color.White else AcrobatTextMuted,
+                                tint = if (selectedPositionSingle != null) Color.White else AcrobatTextMuted,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
 
-                        // Extract Selected to new PDF
                         IconButton(
                             onClick = {
-                                if (selectedPositions.isNotEmpty()) {
+                                if (selectedUids.isNotEmpty()) {
                                     extractTitle = "${currentDoc?.title ?: "Doc"}_extracted"
                                     showExtractDialog = true
                                 }
                             },
-                            enabled = selectedPositions.isNotEmpty(),
+                            enabled = selectedUids.isNotEmpty(),
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(if (selectedPositions.isNotEmpty()) CrimsonPrimary else AcrobatDarkSurfaceVariant)
+                                .background(if (selectedUids.isNotEmpty()) CrimsonPrimary else AcrobatDarkSurfaceVariant)
                                 .testTag("extract_pages_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DriveFileMove,
                                 contentDescription = "Extract to PDF",
-                                tint = if (selectedPositions.isNotEmpty()) Color.White else AcrobatTextMuted,
+                                tint = if (selectedUids.isNotEmpty()) Color.White else AcrobatTextMuted,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
 
-                        // Delete Selected Pages
+                        val canDeleteSelected = selectedUids.isNotEmpty() && pageItems.size > selectedUids.size
                         IconButton(
                             onClick = {
-                                if (selectedPositions.isNotEmpty() && pageOrder.size > selectedPositions.size) {
-                                    val sortedDesc = selectedPositions.sortedDescending()
-                                    for (pos in sortedDesc) {
-                                        pageOrder.removeAt(pos)
-                                    }
-                                    selectedPositions.clear()
+                                if (canDeleteSelected) {
+                                    val toRemove = selectedUids.toSet()
+                                    pageItems.removeAll { toRemove.contains(it.uid) }
+                                    selectedUids.clear()
                                 }
                             },
-                            enabled = selectedPositions.isNotEmpty() && pageOrder.size > selectedPositions.size,
+                            enabled = canDeleteSelected,
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(if (selectedPositions.isNotEmpty() && pageOrder.size > selectedPositions.size) Color(0xFFEF4444) else AcrobatDarkSurfaceVariant)
+                                .background(if (canDeleteSelected) Color(0xFFEF4444) else AcrobatDarkSurfaceVariant)
                                 .testTag("delete_selected_pages_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = "Delete Selected",
-                                tint = if (selectedPositions.isNotEmpty() && pageOrder.size > selectedPositions.size) Color.White else AcrobatTextMuted,
+                                tint = if (canDeleteSelected) Color.White else AcrobatTextMuted,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
 
-                        // Move Later
+                        val canMoveLater = selectedPositionSingle != null && selectedPositionSingle < pageItems.size - 1
                         IconButton(
                             onClick = {
-                                if (selectedPositions.size == 1) {
-                                    val idx = selectedPositions.first()
-                                    if (idx < pageOrder.size - 1) {
-                                        val item = pageOrder.removeAt(idx)
-                                        val rot = pageRotations.remove(item)
-                                        pageOrder.add(idx + 1, item)
-                                        if (rot != null) pageRotations[item] = rot
-                                        selectedPositions.clear()
-                                        selectedPositions.add(idx + 1)
-                                    }
+                                val idx = selectedPositionSingle ?: return@IconButton
+                                if (idx < pageItems.size - 1) {
+                                    val item = pageItems.removeAt(idx)
+                                    pageItems.add(idx + 1, item)
                                 }
                             },
-                            enabled = selectedPositions.size == 1 && selectedPositions.first() < pageOrder.size - 1,
+                            enabled = canMoveLater,
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(if (selectedPositions.size == 1 && selectedPositions.first() < pageOrder.size - 1) CrimsonPrimary else AcrobatDarkSurfaceVariant)
+                                .background(if (canMoveLater) CrimsonPrimary else AcrobatDarkSurfaceVariant)
                                 .testTag("move_page_later_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ArrowForward,
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                 contentDescription = "Move Later",
-                                tint = if (selectedPositions.size == 1 && selectedPositions.first() < pageOrder.size - 1) Color.White else AcrobatTextMuted,
+                                tint = if (canMoveLater) Color.White else AcrobatTextMuted,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -392,7 +371,6 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                 .padding(padding)
                 .padding(horizontal = 14.dp)
         ) {
-            // Quick Toolbar: Add blank page, Add notes page, Select All, Column Density Toggle
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -401,11 +379,11 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // Insert Blank Page Chip
                     AssistChip(
                         onClick = {
-                            val insertAt = if (selectedPositions.isNotEmpty()) selectedPositions.last() + 1 else pageOrder.size
-                            pageOrder.add(insertAt, -1)
+                            val lastSelPos = selectedUids.lastOrNull()?.let { uid -> pageItems.indexOfFirst { it.uid == uid } }
+                            val insertAt = if (lastSelPos != null && lastSelPos >= 0) (lastSelPos + 1).coerceAtMost(pageItems.size) else pageItems.size
+                            pageItems.add(insertAt, ManagedPageItem(uid = nextUid++, originalIndex = -1, rotationDegrees = 0))
                         },
                         label = { Text("+ Blank", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = { Icon(Icons.Default.AddBox, contentDescription = null, modifier = Modifier.size(14.dp), tint = CrimsonAccent) },
@@ -413,11 +391,11 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                         border = BorderStroke(1.dp, AcrobatDarkBorder)
                     )
 
-                    // Insert Notes Page Chip
                     AssistChip(
                         onClick = {
-                            val insertAt = if (selectedPositions.isNotEmpty()) selectedPositions.last() + 1 else pageOrder.size
-                            pageOrder.add(insertAt, -2)
+                            val lastSelPos = selectedUids.lastOrNull()?.let { uid -> pageItems.indexOfFirst { it.uid == uid } }
+                            val insertAt = if (lastSelPos != null && lastSelPos >= 0) (lastSelPos + 1).coerceAtMost(pageItems.size) else pageItems.size
+                            pageItems.add(insertAt, ManagedPageItem(uid = nextUid++, originalIndex = -2, rotationDegrees = 0))
                         },
                         label = { Text("+ Notes", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = { Icon(Icons.Default.NoteAdd, contentDescription = null, modifier = Modifier.size(14.dp), tint = CrimsonAccent) },
@@ -430,17 +408,17 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                     if (isMultiSelectMode) {
                         TextButton(
                             onClick = {
-                                if (selectedPositions.size == pageOrder.size) {
-                                    selectedPositions.clear()
+                                if (selectedUids.size == pageItems.size) {
+                                    selectedUids.clear()
                                 } else {
-                                    selectedPositions.clear()
-                                    for (i in pageOrder.indices) selectedPositions.add(i)
+                                    selectedUids.clear()
+                                    pageItems.forEach { selectedUids.add(it.uid) }
                                 }
                             },
                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = if (selectedPositions.size == pageOrder.size) "Deselect All" else "Select All",
+                                text = if (selectedUids.size == pageItems.size) "Deselect All" else "Select All",
                                 color = CrimsonAccent,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -448,7 +426,6 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                         }
                     }
 
-                    // Grid Density Toggle (2 vs 3 columns)
                     IconButton(
                         onClick = { gridColumns = if (gridColumns == 2) 3 else 2 },
                         modifier = Modifier.size(32.dp)
@@ -463,7 +440,6 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                 }
             }
 
-            // Grid of Pages
             LazyVerticalGrid(
                 columns = GridCells.Fixed(gridColumns),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -471,9 +447,10 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                 contentPadding = PaddingValues(bottom = 24.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                itemsIndexed(pageOrder) { currentPosition, originalIndex ->
-                    val isSelected = selectedPositions.contains(currentPosition)
-                    val rotation = pageRotations[originalIndex] ?: 0
+                itemsIndexed(pageItems, key = { _, item -> item.uid }) { currentPosition, pageItem ->
+                    val originalIndex = pageItem.originalIndex
+                    val rotation = pageItem.rotationDegrees
+                    val isSelected = selectedUids.contains(pageItem.uid)
                     val bitmap = if (originalIndex >= 0) pageBitmaps[originalIndex] else null
 
                     LaunchedEffect(originalIndex) {
@@ -485,14 +462,14 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                     Card(
                         onClick = {
                             if (isMultiSelectMode) {
-                                if (isSelected) selectedPositions.remove(currentPosition)
-                                else selectedPositions.add(currentPosition)
+                                if (isSelected) selectedUids.remove(pageItem.uid)
+                                else selectedUids.add(pageItem.uid)
                             } else {
                                 if (isSelected) {
-                                    selectedPositions.remove(currentPosition)
+                                    selectedUids.remove(pageItem.uid)
                                 } else {
-                                    selectedPositions.clear()
-                                    selectedPositions.add(currentPosition)
+                                    selectedUids.clear()
+                                    selectedUids.add(pageItem.uid)
                                 }
                             }
                         },
@@ -516,7 +493,6 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                             .testTag("page_card_$currentPosition")
                     ) {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            // Page Thumbnail Canvas
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -527,7 +503,6 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                             ) {
                                 when {
                                     originalIndex == -1 -> {
-                                        // Inserted Blank Page
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Icon(Icons.Default.InsertDriveFile, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(32.dp))
                                             Spacer(modifier = Modifier.height(4.dp))
@@ -535,7 +510,6 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                                         }
                                     }
                                     originalIndex == -2 -> {
-                                        // Inserted Lined Notes Page
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Icon(Icons.Default.EditNote, contentDescription = null, tint = CrimsonPrimary, modifier = Modifier.size(32.dp))
                                             Spacer(modifier = Modifier.height(4.dp))
@@ -559,7 +533,6 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                                     }
                                 }
 
-                                // Selection Checkmark Badge
                                 if (isSelected) {
                                     Box(
                                         modifier = Modifier
@@ -573,7 +546,6 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                                     }
                                 }
 
-                                // Rotation badge
                                 if (rotation != 0) {
                                     Box(
                                         modifier = Modifier
@@ -592,7 +564,6 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                                 }
                             }
 
-                            // Footer Bar for Page
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -619,11 +590,9 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    // Individual Rotate Button
                                     IconButton(
                                         onClick = {
-                                            val cur = pageRotations[originalIndex] ?: 0
-                                            pageRotations[originalIndex] = (cur + 90) % 360
+                                            pageItems[currentPosition] = pageItem.copy(rotationDegrees = (rotation + 90) % 360)
                                         },
                                         modifier = Modifier.size(26.dp)
                                     ) {
@@ -635,21 +604,20 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                                         )
                                     }
 
-                                    // Individual Delete Button
                                     IconButton(
                                         onClick = {
-                                            if (pageOrder.size > 1) {
-                                                pageOrder.removeAt(currentPosition)
-                                                selectedPositions.remove(currentPosition)
+                                            if (pageItems.size > 1) {
+                                                pageItems.removeAt(currentPosition)
+                                                selectedUids.remove(pageItem.uid)
                                             }
                                         },
-                                        enabled = pageOrder.size > 1,
+                                        enabled = pageItems.size > 1,
                                         modifier = Modifier.size(26.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Delete,
                                             contentDescription = "Delete Page",
-                                            tint = if (pageOrder.size > 1) CrimsonPrimary else AcrobatTextMuted,
+                                            tint = if (pageItems.size > 1) CrimsonPrimary else AcrobatTextMuted,
                                             modifier = Modifier.size(14.dp)
                                         )
                                     }
@@ -662,13 +630,12 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
         }
     }
 
-    // Extract Selected Pages Dialog
     if (showExtractDialog) {
         AlertDialog(
             onDismissRequest = { showExtractDialog = false },
             title = {
                 Text(
-                    text = "Extract ${selectedPositions.size} Pages to New PDF",
+                    text = "Extract ${selectedUids.size} Pages to New PDF",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = AcrobatTextPrimary
                 )
@@ -698,16 +665,16 @@ fun PageManagerScreen(viewModel: PdfViewModel) {
                 Button(
                     onClick = {
                         val doc = currentDoc ?: return@Button
-                        val indicesToExtract = selectedPositions.sorted().map { pageOrder[it] }
+                        val selSet = selectedUids.toSet()
+                        val orderedSelected = pageItems
+                            .filter { selSet.contains(it.uid) }
+                            .map { it.originalIndex to it.rotationDegrees }
                         showExtractDialog = false
-                        viewModel.extractPagesToNewDocument(
+                        viewModel.extractPagesWithRotations(
                             doc = doc,
-                            includedIndices = indicesToExtract,
-                            rotations = pageRotations.toMap(),
+                            orderedPages = orderedSelected,
                             newTitle = extractTitle
-                        ) {
-                            // Handled in ViewModel
-                        }
+                        ) {}
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)
                 ) {

@@ -107,7 +107,7 @@ fun CoreSuiteMenuSheet(
                                     )
                                 ) {
                                     Text(
-                                        text = "240V • 10/10/2026",
+                                        text = "v${com.example.BuildConfig.VERSION_NAME} • LOCAL SUITE",
                                         color = AdfElectricCyan,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
@@ -136,13 +136,13 @@ fun CoreSuiteMenuSheet(
                     HorizontalDivider(color = AdfBorderSubtle)
                 }
 
-                // 0. Adobe Scan Document Scanner Card
+                // 0. Pro Camera Document Scanner Card
                 item {
                     CoreSuiteCard(
                         tag = "scanner",
                         accentColor = AdfCoral,
                         icon = { AdfIcon.Camera(size = 24.dp, primaryColor = AdfCoral, accentColor = Color.White) },
-                        title = "Scan to PDF (Adobe Scan)",
+                        title = "Scan to PDF (Pro Scanner)",
                         badge = "CAMERA",
                         subtitle = "Snap receipts, contracts & paper with Magic Color whitening",
                         actionText = "Open Document Scanner Camera →",
@@ -185,8 +185,10 @@ fun CoreSuiteMenuSheet(
                             ) {
                                 HorizontalDivider(color = AdfBorderSubtle.copy(alpha = 0.5f))
                                 val subItems = listOf(
-                                    Triple("PDF to Word (.docx)", "Extract text and tables into editable Word docx", "DOCX" to AdfEmerald),
+                                    Triple("PDF to Word (.docx)", "Extract clean text into editable Word docx", "DOCX" to AdfEmerald),
                                     Triple("Word to PDF", "Standardize .docx and .doc into formatted PDF sheets", "PDF" to AdfVibrantBlue),
+                                    Triple("PDF to TXT (.txt)", "Extract clean UTF-8 text into plain text format", "TXT" to Color(0xFF8B5CF6)),
+                                    Triple("TXT to PDF", "Format .txt files into multi-page PDF documents", "TXT→PDF" to Color(0xFF06B6D4)),
                                     Triple("Images to PDF", "Compile camera photos & graphic files into a PDF", "PHOTOS" to AdfCoral),
                                     Triple("PDF to Images", "Render PDF pages into ultra HD PNG or JPEG files", "PNG/JPG" to AdfElectricCyan),
                                     Triple("Merge Multiple PDFs", "Combine 2 or more PDF documents into one master document", "MERGE" to AdfAmber),
@@ -201,10 +203,19 @@ fun CoreSuiteMenuSheet(
                                         badgeColor = badgePair.second,
                                         onClick = {
                                             onDismiss()
-                                            if (idx == 6) {
+                                            if (idx == 8) {
                                                 onNavigate(AppScreen.PDF_DIFF)
                                             } else {
-                                                val toolTab = when (idx) { 0 -> 3; 1 -> 2; 2 -> 0; 3 -> 1; 4 -> 5; else -> 6 }
+                                                val toolTab = when (idx) {
+                                                    0 -> 3
+                                                    1 -> 2
+                                                    2 -> 8
+                                                    3 -> 9
+                                                    4 -> 0
+                                                    5 -> 1
+                                                    6 -> 5
+                                                    else -> 6
+                                                }
                                                 onOpenToolTab(toolTab)
                                                 onNavigate(AppScreen.TOOLS)
                                             }

@@ -5,11 +5,13 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import android.graphics.pdf.PdfRenderer
+import android.media.ExifInterface
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import com.example.data.local.AnnotationEntity
@@ -108,13 +110,16 @@ object PdfExportEngine {
                         val page = renderer.openPage(i)
                         val w = page.width
                         val h = page.height
-                        val bitmap = Bitmap.createBitmap(w * 2, h * 2, Bitmap.Config.ARGB_8888)
+                        val scale = if (maxOf(w, h) > 1600) 1 else 2
+                        val bitmap = Bitmap.createBitmap(w * scale, h * scale, Bitmap.Config.ARGB_8888)
+                        bitmap.eraseColor(Color.WHITE)
                         page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                         page.close()
 
                         totalPages++
                         val pageInfo = PdfDocument.PageInfo.Builder(w, h, totalPages).create()
                         val newPage = newDoc.startPage(pageInfo)
+                        newPage.canvas.drawColor(Color.WHITE)
                         newPage.canvas.drawBitmap(bitmap, null, Rect(0, 0, w, h), null)
                         bitmap.recycle()
                         newDoc.finishPage(newPage)
@@ -165,14 +170,16 @@ object PdfExportEngine {
                             val w = page.width
                             val h = page.height
 
-                            val scale = if (maxOf(w, h) > 2000) 1 else 2
+                            val scale = if (maxOf(w, h) > 1600) 1 else 2
                             val bitmap = Bitmap.createBitmap(w * scale, h * scale, Bitmap.Config.ARGB_8888)
+                            bitmap.eraseColor(Color.WHITE)
                             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                             page.close()
 
                             totalMergedPages++
                             val pageInfo = PdfDocument.PageInfo.Builder(w, h, totalMergedPages).create()
                             val newPage = newDoc.startPage(pageInfo)
+                            newPage.canvas.drawColor(Color.WHITE)
                             newPage.canvas.drawBitmap(bitmap, null, Rect(0, 0, w, h), null)
                             bitmap.recycle()
                             newDoc.finishPage(newPage)
@@ -251,14 +258,17 @@ object PdfExportEngine {
                 val width = page.width
                 val height = page.height
 
-                // Render background page at 2x resolution for crispness
-                val pageBitmap = Bitmap.createBitmap(width * 2, height * 2, Bitmap.Config.ARGB_8888)
+                // Render background page cleanly with white backing and OOM-safe scale
+                val scale = if (maxOf(width, height) > 1600) 1 else 2
+                val pageBitmap = Bitmap.createBitmap(width * scale, height * scale, Bitmap.Config.ARGB_8888)
+                pageBitmap.eraseColor(Color.WHITE)
                 page.render(pageBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                 page.close()
 
                 val pageInfo = PdfDocument.PageInfo.Builder(width, height, pageIdx + 1).create()
                 val docPage = newDoc.startPage(pageInfo)
                 val canvas = docPage.canvas
+                canvas.drawColor(Color.WHITE)
 
                 // Draw base page
                 canvas.drawBitmap(pageBitmap, null, Rect(0, 0, width, height), null)
@@ -285,6 +295,69 @@ object PdfExportEngine {
         }
     }
 
+    /**
+     * Decodes a content URI bitmap safely with automatic EXIF orientation correction
+     * and inSampleSize downsampling so large camera photos do not cause OutOfMemoryError.
+     */
+    fun decodeSampledRotatedBitmap(
+        context: Context,
+        uri: Uri,
+        maxDimension: Int = 2048
+    ): Bitmap? {
+        return try {
+            val orientation = context.contentResolver.openInputStream(uri)?.use { exifStream ->
+                try {
+                    ExifInterface(exifStream).getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )
+                } catch (_: Exception) {
+                    ExifInterface.ORIENTATION_NORMAL
+                }
+            } ?: ExifInterface.ORIENTATION_NORMAL
+
+            val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, boundsOpts)
+            }
+
+            var inSampleSize = 1
+            val rawW = boundsOpts.outWidth
+            val rawH = boundsOpts.outHeight
+            if (rawW > maxDimension || rawH > maxDimension) {
+                while ((rawW / inSampleSize) > maxDimension || (rawH / inSampleSize) > maxDimension) {
+                    inSampleSize *= 2
+                }
+            }
+
+            val decodeOpts = BitmapFactory.Options().apply {
+                this.inSampleSize = inSampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val decoded = context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, decodeOpts)
+            } ?: return null
+
+            val rotationAngle = when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+            if (rotationAngle == 0f) {
+                decoded
+            } else {
+                val matrix = Matrix().apply { postRotate(rotationAngle) }
+                val rotated = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+                if (rotated !== decoded) decoded.recycle()
+                rotated
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     suspend fun convertImagesToPdf(
         context: Context,
         imageUris: List<Uri>,
@@ -295,32 +368,31 @@ object PdfExportEngine {
         val pageHeight = 842
 
         try {
-            for ((idx, uri) in imageUris.withIndex()) {
-                val inputStream = context.contentResolver.openInputStream(uri) ?: continue
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                inputStream.close()
+            var writtenPage = 0
+            for (uri in imageUris) {
+                val bitmap = decodeSampledRotatedBitmap(context, uri, 2048) ?: continue
+                writtenPage++
+                val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, writtenPage).create()
+                val page = newDoc.startPage(pageInfo)
+                val canvas = page.canvas
+                canvas.drawColor(Color.WHITE)
 
-                if (bitmap != null) {
-                    val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, idx + 1).create()
-                    val page = newDoc.startPage(pageInfo)
-                    val canvas = page.canvas
+                // Scale image maintaining aspect ratio
+                val scale = Math.min(
+                    (pageWidth - 60f) / bitmap.width.coerceAtLeast(1),
+                    (pageHeight - 60f) / bitmap.height.coerceAtLeast(1)
+                )
+                val destW = bitmap.width * scale
+                val destH = bitmap.height * scale
+                val left = (pageWidth - destW) / 2f
+                val top = (pageHeight - destH) / 2f
 
-                    // Scale image maintaining aspect ratio
-                    val scale = Math.min(
-                        (pageWidth - 60f) / bitmap.width,
-                        (pageHeight - 60f) / bitmap.height
-                    )
-                    val destW = bitmap.width * scale
-                    val destH = bitmap.height * scale
-                    val left = (pageWidth - destW) / 2f
-                    val top = (pageHeight - destH) / 2f
-
-                    canvas.drawBitmap(bitmap, null, RectF(left, top, left + destW, top + destH), null)
-                    bitmap.recycle()
-                    newDoc.finishPage(page)
-                }
+                canvas.drawBitmap(bitmap, null, RectF(left, top, left + destW, top + destH), null)
+                bitmap.recycle()
+                newDoc.finishPage(page)
             }
 
+            if (writtenPage == 0) return@withContext false
             FileOutputStream(outputFile).use { fos -> newDoc.writeTo(fos) }
             true
         } catch (e: Exception) {
@@ -331,12 +403,20 @@ object PdfExportEngine {
         }
     }
 
-
-
     suspend fun organizePages(
         sourceFile: File,
         includedPageIndices: List<Int>,
         pageRotations: Map<Int, Int>, // pageIndex to degrees (0, 90, 180, 270)
+        outputFile: File
+    ): Boolean = organizePagesWithRotations(
+        sourceFile = sourceFile,
+        orderedPages = includedPageIndices.map { idx -> idx to (pageRotations[idx] ?: 0) },
+        outputFile = outputFile
+    )
+
+    suspend fun organizePagesWithRotations(
+        sourceFile: File,
+        orderedPages: List<Pair<Int, Int>>, // Pairs of (originalPageIndex, rotationDegrees)
         outputFile: File
     ): Boolean = withContext(Dispatchers.IO) {
         var pfd: ParcelFileDescriptor? = null
@@ -348,7 +428,7 @@ object PdfExportEngine {
             renderer = PdfRenderer(pfd)
 
             var newPageNum = 1
-            for (pageIdx in includedPageIndices) {
+            for ((pageIdx, rawRotation) in orderedPages) {
                 if (pageIdx == -1 || pageIdx == -2) {
                     val targetW = 595
                     val targetH = 842
@@ -388,9 +468,11 @@ object PdfExportEngine {
                 val page = renderer.openPage(pageIdx)
                 val w = page.width
                 val h = page.height
-                val rotation = pageRotations[pageIdx] ?: 0
+                val rotation = ((rawRotation % 360) + 360) % 360
 
-                val bitmap = Bitmap.createBitmap(w * 2, h * 2, Bitmap.Config.ARGB_8888)
+                val scale = if (maxOf(w, h) > 1600) 1 else 2
+                val bitmap = Bitmap.createBitmap(w * scale, h * scale, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(Color.WHITE)
                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                 page.close()
 
@@ -400,6 +482,7 @@ object PdfExportEngine {
                 val pageInfo = PdfDocument.PageInfo.Builder(targetW, targetH, newPageNum++).create()
                 val newPage = newDoc.startPage(pageInfo)
                 val canvas = newPage.canvas
+                canvas.drawColor(Color.WHITE)
 
                 if (rotation != 0) {
                     canvas.save()
@@ -536,6 +619,8 @@ object PdfExportEngine {
                         }
                         canvas.drawPath(flourishPath, linePaint)
                     } else if (ann.pointsJson.isNotBlank()) {
+                        val sigW = (if (ann.width > 0.05f) ann.width else 0.30f) * pageWidth
+                        val sigH = (if (ann.height > 0.03f) ann.height else 0.12f) * pageHeight
                         val sigPaint = Paint().apply {
                             color = ann.colorHex.toInt()
                             strokeWidth = 2.5f
@@ -545,15 +630,15 @@ object PdfExportEngine {
                             isAntiAlias = true
                         }
                         try {
-                            // Multiple stroke paths inside signature
+                            // Multiple stroke paths inside signature mapped to (posX, posY, sigW, sigH)
                             val strokes = JSONArray(ann.pointsJson)
                             for (s in 0 until strokes.length()) {
                                 val strokeArr = strokes.getJSONArray(s)
                                 val path = android.graphics.Path()
                                 for (p in 0 until strokeArr.length()) {
                                     val pt = strokeArr.getJSONObject(p)
-                                    val px = (pt.getDouble("x").toFloat()) * pageWidth
-                                    val py = (pt.getDouble("y").toFloat()) * pageHeight
+                                    val px = x + (pt.getDouble("x").toFloat()) * sigW
+                                    val py = y + (pt.getDouble("y").toFloat()) * sigH
                                     if (p == 0) path.moveTo(px, py) else path.lineTo(px, py)
                                 }
                                 canvas.drawPath(path, sigPaint)

@@ -39,7 +39,9 @@ enum class ConversionIconKind {
     WATERMARK,
     MERGE,
     ORGANIZE,
-    COMPRESS_PDF
+    COMPRESS_PDF,
+    PDF_TO_TXT,
+    TXT_TO_PDF
 }
 
 data class ConversionAction(
@@ -55,8 +57,8 @@ data class ConversionAction(
 )
 
 /**
- * ADF AIO Conversion Hub Screen
- * Displays a dedicated futuristic window showcasing all document conversion capabilities
+ * PDF (AIO) Conversion Hub Screen
+ * Displays a dedicated window showcasing all document conversion capabilities
  * (Images to PDF, PDF to Images, Word to PDF, PDF to Word, Watermark Studio, Merge PDFs, Organize Pages).
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -160,6 +162,28 @@ fun ConversionHubScreen(
                 accentColor = AdfElectricCyan,
                 supportedFormats = "Low / Medium / Extreme compression profiles",
                 targetTab = 7
+            ),
+            ConversionAction(
+                id = 8,
+                title = "PDF to TXT",
+                subtitle = "Extract clean UTF-8 readable text from PDF streams & view in TXT Viewer",
+                tag = "PLAIN TEXT",
+                iconKind = ConversionIconKind.PDF_TO_TXT,
+                iconBgColor = Color(0xFF8B5CF6).copy(alpha = 0.15f),
+                accentColor = Color(0xFF8B5CF6),
+                supportedFormats = "UTF-8 Plain Text (.txt)",
+                targetTab = 8
+            ),
+            ConversionAction(
+                id = 9,
+                title = "TXT to PDF",
+                subtitle = "Convert plain text files into cleanly formatted multi-page PDF documents",
+                tag = "TEXT COMPILER",
+                iconKind = ConversionIconKind.TXT_TO_PDF,
+                iconBgColor = Color(0xFF06B6D4).copy(alpha = 0.15f),
+                accentColor = Color(0xFF06B6D4),
+                supportedFormats = ".txt (UTF-8 / UTF-16)",
+                targetTab = 9
             )
         )
     }
@@ -184,7 +208,7 @@ fun ConversionHubScreen(
                                 color = AdfElectricCyan.copy(alpha = 0.15f)
                             ) {
                                 Text(
-                                    text = "7 ENGINES",
+                                    text = "10 ENGINES",
                                     color = AdfElectricCyan,
                                     fontSize = 8.sp,
                                     fontWeight = FontWeight.ExtraBold,
@@ -193,7 +217,7 @@ fun ConversionHubScreen(
                             }
                         }
                         Text(
-                            text = "ADF AIO Universal Document Transformer",
+                            text = "PDF (AIO) Universal Document Transformer",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                             color = AdfElectricCyan
                         )
@@ -327,6 +351,9 @@ fun ConversionHubScreen(
                                 }
                                 ConversionIconKind.COMPRESS_PDF -> {
                                     AdfIcon.Conversion(size = 26.dp, primaryColor = action.accentColor, isAnimated = true)
+                                }
+                                ConversionIconKind.PDF_TO_TXT, ConversionIconKind.TXT_TO_PDF -> {
+                                    AdfIcon.FileOpen(size = 26.dp, primaryColor = action.accentColor, accentColor = Color.White)
                                 }
                             }
                         }

@@ -22,7 +22,7 @@ import com.example.ui.components.FeedbackFormCard
 import com.example.ui.theme.*
 
 /**
- * Dedicated Feedback Screen for PDF AIO app.
+ * Dedicated Feedback Screen for PDF (AIO) app.
  * Provides user feedback input fields with direct email routing to ishantkohlikohli@gmail.com.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -57,7 +57,7 @@ fun FeedbackScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Help us improve PDF AIO",
+                                text = "Help us improve PDF (AIO)",
                                 color = AdfTextSecondary,
                                 fontSize = 11.sp
                             )

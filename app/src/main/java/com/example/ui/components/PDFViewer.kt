@@ -1,7 +1,5 @@
 package com.example.ui.components
 
-import android.app.Activity
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
@@ -41,13 +39,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.data.fps.DisplayRefreshRateManager
 import com.example.data.local.DocumentEntity
 import com.example.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Locale
 
 /**
  * State Management for PDFViewer
@@ -191,16 +189,6 @@ fun PDFViewer(
 ) {
     val context = LocalContext.current
     var renderResult by remember { mutableStateOf<PdfRenderResult>(PdfRenderResult.Idle) }
-
-    // Lock display refresh rate to 60 FPS for all document rendering
-    LaunchedEffect(Unit) {
-        val activity = context as? Activity
-        if (activity != null) {
-            DisplayRefreshRateManager.setTargetRefreshRate(activity, 60)
-        } else {
-            DisplayRefreshRateManager.setPreferredRefreshRate(60)
-        }
-    }
 
     // Zoom & Pan gesture states
     var zoomScale by remember { mutableFloatStateOf(1f) }
@@ -554,7 +542,7 @@ fun PDFViewer(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "✨ 4K Ultra-Clarity Active (${String.format("%.1fx", zoomScale)})",
+                                text = "✨ 4K Ultra-Clarity Active (${String.format(Locale.US, "%.1fx", zoomScale)})",
                                 color = Color.White,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold
@@ -749,7 +737,7 @@ fun PdfViewer(
 )
 
 /**
- * Loading Placeholder with subtle cyber pulse animation
+ * Loading Placeholder with subtle shimmer pulse animation
  */
 @Composable
 private fun PdfViewerLoadingPlaceholder(

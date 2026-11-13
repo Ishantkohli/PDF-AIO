@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "PDF AIO"
+rootProject.name = "PDF (AIO)"
 
 include(":app")

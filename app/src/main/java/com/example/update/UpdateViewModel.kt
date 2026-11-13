@@ -49,7 +49,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _updateState.value = UpdateState.Checking
             if (manual) {
-                _userMessage.value = "Checking GitHub for PDF AIO updates..."
+                _userMessage.value = "Checking GitHub for PDF (AIO) updates..."
             }
 
             val result = UpdateManager.checkForUpdates(context)
@@ -61,7 +61,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
                     val current = BuildConfig.VERSION_NAME
                     _updateState.value = UpdateState.UpToDate(current)
                     if (manual) {
-                        _userMessage.value = "PDF AIO is up to date (v$current)!"
+                        _userMessage.value = "PDF (AIO) is up to date (v$current)!"
                     }
                 }
             }.onFailure { err ->
@@ -117,7 +117,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
                 // Launch installer automatically once downloaded!
                 val launched = UpdateManager.launchInstaller(context, file)
                 if (!launched) {
-                    _userMessage.value = "Please allow install permission to update PDF AIO"
+                    _userMessage.value = "Please allow install permission to update PDF (AIO)"
                 }
             }.onFailure { err ->
                 _showProgressCard.value = false

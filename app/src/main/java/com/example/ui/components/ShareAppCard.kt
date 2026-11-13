@@ -1,9 +1,12 @@
 package com.example.ui.components
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -99,7 +102,7 @@ fun ShareAppCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Share PDF AIO",
+                            text = "Share PDF (AIO)",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = AdfTextPrimary
                         )
@@ -144,7 +147,7 @@ fun ShareAppCard(
                 ) {
                     Image(
                         bitmap = qrBitmap.asImageBitmap(),
-                        contentDescription = "PDF AIO Download QR Code (Black & White)",
+                        contentDescription = "PDF (AIO) Download QR Code (Black & White)",
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -160,7 +163,7 @@ fun ShareAppCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Share PDF AIO with friends, students, & colleagues for fast document viewing, scanning, and signatures.",
+                        text = "Share PDF (AIO) with friends, students, & colleagues for fast document viewing, scanning, and signatures.",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 15.sp),
                         color = AdfTextSecondary
                     )
@@ -218,11 +221,11 @@ private fun shareAppLink(context: Context, url: String) {
             action = Intent.ACTION_SEND
             putExtra(
                 Intent.EXTRA_TEXT,
-                "Check out PDF AIO by Ishant — Next-Gen 100% Offline PDF Reader, Scanner & Editor! Download free at: $url"
+                "Check out PDF (AIO) by Ishant — Next-Gen 100% Offline PDF Reader, Scanner & Editor! Download free at: $url"
             )
             type = "text/plain"
         }
-        val shareIntent = Intent.createChooser(sendIntent, "Share PDF AIO")
+        val shareIntent = Intent.createChooser(sendIntent, "Share PDF (AIO)")
         context.startActivity(shareIntent)
     } catch (e: Exception) {
         Toast.makeText(context, "Could not share link: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -231,16 +234,39 @@ private fun shareAppLink(context: Context, url: String) {
 
 private fun saveQrBitmapToDevice(context: Context, bitmap: Bitmap) {
     try {
-        val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-        val appDir = File(picturesDir, "PDF_AIO").apply { mkdirs() }
-        val qrFile = File(appDir, "pdf_aio_qr_code.png")
-
-        FileOutputStream(qrFile).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        val fileName = "pdf_aio_qr_code_${System.currentTimeMillis()}.png"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/PDF_AIO")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("Unable to create MediaStore entry")
+            try {
+                resolver.openOutputStream(uri)?.use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                } ?: throw IllegalStateException("Unable to open output stream")
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            } catch (e: Exception) {
+                resolver.delete(uri, null, null)
+                throw e
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            val appDir = File(picturesDir, "PDF_AIO").apply { mkdirs() }
+            val qrFile = File(appDir, fileName)
+            FileOutputStream(qrFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
         }
-
         Toast.makeText(context, "QR Code saved to Pictures/PDF_AIO!", Toast.LENGTH_LONG).show()
     } catch (e: Exception) {
-        Toast.makeText(context, "Saved to cache: ${e.message}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Could not save QR code: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }

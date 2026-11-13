@@ -1,7 +1,7 @@
 package com.example.update
 
 /**
- * Metadata for a released version of PDF AIO fetched from GitHub Releases or custom update endpoint.
+ * Metadata for a released version of PDF (AIO) fetched from GitHub Releases or custom update endpoint.
  */
 data class AppReleaseInfo(
     val versionName: String,
@@ -16,7 +16,7 @@ data class AppReleaseInfo(
 )
 
 /**
- * Reactive states for the update lifecycle in PDF AIO.
+ * Reactive states for the update lifecycle in PDF (AIO).
  */
 sealed interface UpdateState {
     data object Idle : UpdateState

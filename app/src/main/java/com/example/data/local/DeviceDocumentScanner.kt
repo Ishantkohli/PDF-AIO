@@ -29,10 +29,6 @@ data class DeviceFileItem(
 
 enum class DeviceFileType {
     PDF,
-    WORD_DOCX,
-    WORD_DOC,
-    EXCEL,
-    POWERPOINT,
     TEXT,
     OTHER
 }
@@ -405,10 +401,6 @@ object DeviceDocumentScanner {
     private fun getFileTypeFromExtension(ext: String): DeviceFileType? {
         return when (ext) {
             "pdf" -> DeviceFileType.PDF
-            "docx" -> DeviceFileType.WORD_DOCX
-            "doc" -> DeviceFileType.WORD_DOC
-            "xlsx", "xls" -> DeviceFileType.EXCEL
-            "pptx", "ppt" -> DeviceFileType.POWERPOINT
             "txt" -> DeviceFileType.TEXT
             else -> null
         }
@@ -417,11 +409,7 @@ object DeviceDocumentScanner {
     private fun getFileTypeFromMime(mime: String): DeviceFileType? {
         return when {
             mime.contains("pdf", ignoreCase = true) -> DeviceFileType.PDF
-            mime.contains("wordprocessingml", ignoreCase = true) -> DeviceFileType.WORD_DOCX
-            mime.contains("msword", ignoreCase = true) -> DeviceFileType.WORD_DOC
-            mime.contains("spreadsheetml", ignoreCase = true) || mime.contains("excel", ignoreCase = true) -> DeviceFileType.EXCEL
-            mime.contains("presentationml", ignoreCase = true) || mime.contains("powerpoint", ignoreCase = true) -> DeviceFileType.POWERPOINT
-            mime.startsWith("text/", ignoreCase = true) -> DeviceFileType.TEXT
+            mime.equals("text/plain", ignoreCase = true) -> DeviceFileType.TEXT
             else -> null
         }
     }
@@ -429,12 +417,6 @@ object DeviceDocumentScanner {
     private fun getMimeTypeForExtension(ext: String): String {
         return when (ext) {
             "pdf" -> "application/pdf"
-            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            "doc" -> "application/msword"
-            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            "xls" -> "application/vnd.ms-excel"
-            "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-            "ppt" -> "application/vnd.ms-powerpoint"
             "txt" -> "text/plain"
             else -> "application/octet-stream"
         }

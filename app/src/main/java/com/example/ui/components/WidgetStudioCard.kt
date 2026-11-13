@@ -79,7 +79,7 @@ fun WidgetStudioCard(
     )
 
     val widgetOptions = listOf(
-        WidgetOption("all_in_one", "PDF AIO Suite", "Interactive 6-Tool Quick Dock", "4 x 2", PdfAioAllInOneWidgetProvider::class.java, AdfElectricCyan),
+        WidgetOption("all_in_one", "PDF (AIO) Suite", "Interactive 6-Tool Quick Dock", "4 x 2", PdfAioAllInOneWidgetProvider::class.java, AdfElectricCyan),
         WidgetOption("scanner", "Scanner", "Live Viewfinder Camera & Shoot", "2 x 2", ScanDocumentWidgetProvider::class.java, AdfCoral),
         WidgetOption("pdf_to_word", "PDF to Word", "Convert PDF → DOCX", "2 x 2", PdfToWordWidgetProvider::class.java, AdfEmerald),
         WidgetOption("word_to_pdf", "Word to PDF", "Compile DOCX → PDF", "2 x 2", WordToPdfWidgetProvider::class.java, Color(0xFF60A5FA)),
@@ -253,7 +253,7 @@ fun WidgetStudioCard(
                                     WidgetPinHelper.requestPinWidget(context, activeOption.providerClass)
                                     Toast.makeText(context, "Adding ${activeOption.title} widget to Home Screen...", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, "Long-press home screen -> Widgets -> PDF AIO -> ${activeOption.title}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "Long-press home screen -> Widgets -> PDF (AIO) -> ${activeOption.title}", Toast.LENGTH_LONG).show()
                                 }
                             },
                             modifier = Modifier
@@ -677,9 +677,9 @@ fun WidgetStudioCard(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Column {
-                                        Text("PDF AIO ENGINE TELEMETRY", color = Color(0xFFF38BA8), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                        Text("60 FPS Performance Lock Active", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
-                                        Text("Version 5.1.6 Pro • Kotlin Compose Engine", color = AdfTextMuted, fontSize = 10.sp)
+                                        Text("PDF (AIO) ENGINE TELEMETRY", color = Color(0xFFF38BA8), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        Text("Hardware Refresh Sync Active", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                                        Text("Version ${com.example.BuildConfig.VERSION_NAME} Pro • Kotlin Compose Engine", color = AdfTextMuted, fontSize = 10.sp)
                                     }
 
                                     Surface(
@@ -728,7 +728,7 @@ fun WidgetStudioCard(
                                 WidgetPinHelper.requestPinWidget(context, activeOption.providerClass)
                                 Toast.makeText(context, "Adding ${activeOption.title} to Phone Desktop...", Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(context, "To add: Long-press home screen -> Widgets -> PDF AIO", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "To add: Long-press home screen -> Widgets -> PDF (AIO)", Toast.LENGTH_LONG).show()
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = activeOption.badgeColor.copy(alpha = 0.15f)),

@@ -84,7 +84,7 @@ object SampleDocumentGenerator {
 
         var y = 130f
         canvas.drawText("This Mutual Non-Disclosure Agreement (\"Agreement\") is entered into on October 14, 2026, by and", 40f, y, bodyPaint); y += 18f
-        canvas.drawText("between PDF AIO Global Technologies Inc., a Delaware corporation, and the Undersigned Recipient.", 40f, y, bodyPaint); y += 30f
+        canvas.drawText("between PDF (AIO) Global Technologies Inc., a Delaware corporation, and the Undersigned Recipient.", 40f, y, bodyPaint); y += 30f
 
         canvas.drawText("1. PURPOSE OF DISCLOSURE", 40f, y, headerPaint); y += 20f
         val p1Lines = listOf(

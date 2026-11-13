@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 val context = androidx.compose.ui.platform.LocalContext.current
 
-                // Background check for PDF AIO app updates on startup
+                // Background check for PDF (AIO) app updates on startup
                 LaunchedEffect(Unit) {
                     updateViewModel.checkForUpdates(context, manual = false)
                 }
@@ -294,9 +294,9 @@ class MainActivity : ComponentActivity() {
                                         viewModel = viewModel,
                                         onBack = { viewModel.navigateTo(AppScreen.HOME) }
                                     )
-                                    AppScreen.PPT_VIEWER -> com.example.ui.screens.PptViewerScreen(
+                                    AppScreen.TXT_VIEWER -> com.example.ui.screens.TxtViewerScreen(
                                         viewModel = viewModel,
-                                        onBack = { viewModel.closePresentation() }
+                                        onBack = { viewModel.closeTxtDocument() }
                                     )
                                 }
                             }
@@ -369,6 +369,16 @@ class MainActivity : ComponentActivity() {
             }
             "open_pdf_to_word" -> {
                 viewModel.setSelectedToolTab(3)
+                viewModel.navigateTo(AppScreen.TOOLS)
+                return
+            }
+            "open_pdf_to_txt" -> {
+                viewModel.setSelectedToolTab(8)
+                viewModel.navigateTo(AppScreen.TOOLS)
+                return
+            }
+            "open_txt_to_pdf" -> {
+                viewModel.setSelectedToolTab(9)
                 viewModel.navigateTo(AppScreen.TOOLS)
                 return
             }

@@ -54,9 +54,9 @@ data class ShowcaseFeature(
 )
 
 /**
- * PDF AIO Bootup Animation Showcase
- * Strictly locked to 30 FPS (33.3ms per frame tick) showcasing all core capabilities
- * of PDF AIO, followed by unlocking maximum hardware refresh rates (60/90/120/165 FPS).
+ * PDF (AIO) Bootup Animation Showcase
+ * Showcases all core capabilities of PDF (AIO), followed by unlocking
+ * maximum hardware refresh rates (60/90/120/165 FPS).
  */
 @Composable
 fun BootupShowcaseScreen(
@@ -122,7 +122,7 @@ fun BootupShowcaseScreen(
                 capabilities = listOf(
                     "Native Android PdfRenderer with continuous vertical scroll",
                     "Smooth multi-touch pinch zoom up to 4.5x magnification",
-                    "Liquid Mode AI reflow & text-to-speech narration",
+                    "Reflow Reader mode & text-to-speech narration",
                     "Night, Sepia, and High-Contrast executive color schemes"
                 )
             ),
@@ -316,7 +316,7 @@ fun BootupShowcaseScreen(
                     // App Logo with Laser Light Sweep
                     Image(
                         painter = painterResource(id = R.drawable.pdf_aio_logo),
-                        contentDescription = "ADF AIO Logo",
+                        contentDescription = "PDF (AIO) Logo",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .size(118.dp)
@@ -347,7 +347,7 @@ fun BootupShowcaseScreen(
                 // Brand Title & Tagline
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "ADF AIO",
+                        text = "PDF (AIO)",
                         style = MaterialTheme.typography.headlineLarge.copy(
                             fontWeight = FontWeight.Black,
                             letterSpacing = 2.sp
@@ -355,7 +355,7 @@ fun BootupShowcaseScreen(
                         color = Color.White
                     )
                     Text(
-                        text = "FUTURISTIC ALL-IN-ONE DOCUMENT SUITE",
+                        text = "ALL-IN-ONE DOCUMENT SUITE",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.2.sp
@@ -363,11 +363,11 @@ fun BootupShowcaseScreen(
                         color = Color(0xFF00E5FF)
                     )
                     Spacer(modifier = Modifier.height(6.dp))
-                    // Real-time Cyber Kernel Telemetry Line
+                    // Real-time Kernel Telemetry Line
                     val terminalStatus = when {
-                        frameCount < 40 -> "KERNEL: ADF AIO v2.4 HYPER-ENGINE ONLINE"
+                        frameCount < 40 -> "KERNEL: PDF (AIO) v${com.example.BuildConfig.VERSION_NAME} ENGINE ONLINE"
                         frameCount < 100 -> "DISPLAY: 165Hz VARIABLE REFRESH RATE DETECTED"
-                        frameCount < 180 -> "CONVERTER: 7 BI-DIRECTIONAL ENGINES LOADED"
+                        frameCount < 180 -> "CONVERTER: 10 LOCAL ENGINES LOADED"
                         frameCount < 260 -> "EDITOR: WHITEOUT & INLINE TEXT ENGINE READY"
                         frameCount < 340 -> "SECURITY: ENCRYPTED SIGNATURE VAULT ACTIVE"
                         else -> "SYSTEM READY • 100% HARDWARE ACCELERATED"
@@ -591,7 +591,7 @@ fun BootupShowcaseScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Enter PDF AIO (Unlock Max ${maxHardwareFps} FPS)",
+                        text = "Enter PDF (AIO) (Unlock Max ${maxHardwareFps} FPS)",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp

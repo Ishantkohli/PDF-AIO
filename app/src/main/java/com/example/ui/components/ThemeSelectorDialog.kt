@@ -30,7 +30,7 @@ import com.example.ui.theme.*
 
 /**
  * Reusable Local Theme Selector Dialog.
- * Allows switching between Acrobat Dark, OLED Pitch Black, Neon Cyberpunk, and Executive Emerald.
+ * Allows switching between Liquid Glass, Deep Dark, OLED Pitch Black, Warm Amber Sunset, Executive Emerald, and Frosted Crystal themes.
  */
 @Composable
 fun ThemeSelectorDialog(

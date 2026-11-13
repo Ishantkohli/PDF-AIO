@@ -13,7 +13,7 @@ import java.util.*
 import kotlin.math.min
 
 /**
- * Filter modes inspired by Adobe Scan & CamScanner
+ * Professional document enhancement filter modes
  */
 enum class ScanFilter(val label: String, val description: String) {
     WHITE_GREY("White & Grey", "Whitens paper background & sharpens grey text/lines"),
@@ -40,45 +40,24 @@ data class ScannedPage(
 object DocumentScanProcessor {
 
     /**
-     * Loads a Bitmap from a Uri with automatic downsampling to protect against OOMs.
+     * Loads a Bitmap from a Uri with automatic EXIF rotation and downsampling to protect against OOMs.
      */
     suspend fun loadBitmapFromUri(context: Context, uri: Uri, maxDimension: Int = 2048): Bitmap? = withContext(Dispatchers.IO) {
-        try {
-            val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                BitmapFactory.decodeStream(stream, null, boundsOptions)
-            }
-
-            var inSampleSize = 1
-            val maxSide = maxOf(boundsOptions.outWidth, boundsOptions.outHeight)
-            while (maxSide / (inSampleSize * 2) >= maxDimension) {
-                inSampleSize *= 2
-            }
-
-            val decodeOptions = BitmapFactory.Options().apply {
-                this.inSampleSize = inSampleSize
-                inPreferredConfig = Bitmap.Config.ARGB_8888
-            }
-
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                BitmapFactory.decodeStream(stream, null, decodeOptions)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
+        com.example.data.pdf.PdfExportEngine.decodeSampledRotatedBitmap(context, uri, maxDimension)
     }
 
     /**
-     * Applies Adobe Scan-style document enhancement filters, rotation, and intensity curve to a Bitmap.
+     * Applies document enhancement filters, rotation, and intensity curve to a Bitmap.
      */
     fun processBitmap(source: Bitmap, filter: ScanFilter, rotationDegrees: Int, filterIntensity: Float = 1.0f): Bitmap {
-        var bmp = source
-
-        // 1. Rotation if needed
-        if (rotationDegrees % 360 != 0) {
+        var rotatedIntermediate: Bitmap? = null
+        val bmp = if (rotationDegrees % 360 != 0) {
             val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-            bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
+            Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true).also {
+                if (it !== source) rotatedIntermediate = it
+            }
+        } else {
+            source
         }
 
         if (filter == ScanFilter.ORIGINAL) {
@@ -124,7 +103,7 @@ object DocumentScanProcessor {
             }
 
             ScanFilter.MAGIC_COLOR -> {
-                // Adobe Scan "Magic Color" formula:
+                // Magic Color enhancement formula:
                 // Boosts contrast to whiten paper backgrounds, slightly increases brightness,
                 // and enhances contrast for ink/lettering while preserving colored stamps and logos.
                 val contrast = 1.38f * intensity
@@ -142,7 +121,7 @@ object DocumentScanProcessor {
             }
 
             ScanFilter.CLEAN_TEXT -> {
-                // Adobe Scan "B&W Document" filter:
+                // Clean B&W Document filter:
                 // Heavy grayscale conversion with steep high-contrast threshold curve
                 // to turn paper backgrounds pure white (#FFFFFF) and ink crisp black (#000000).
                 val grayMatrix = ColorMatrix().apply { setSaturation(0f) }
@@ -210,31 +189,51 @@ object DocumentScanProcessor {
             }
         }
 
+        rotatedIntermediate?.let {
+            if (!it.isRecycled) it.recycle()
+        }
         return output
+    }
+
+    /**
+     * Crops a bitmap cleanly to the central printable margin area (removing outer edges).
+     */
+    fun trimPageMargins(source: Bitmap, marginFraction: Float = 0.06f): Bitmap {
+        val frac = marginFraction.coerceIn(0.01f, 0.25f)
+        val x = (source.width * frac).toInt()
+        val y = (source.height * frac).toInt()
+        val w = (source.width - x * 2).coerceAtLeast(10)
+        val h = (source.height - y * 2).coerceAtLeast(10)
+        return Bitmap.createBitmap(source, x, y, w, h)
     }
 
     /**
      * Generates a fast scaled thumbnail for live filter previews in the filter selection bar.
      */
     fun createFilterPreviewThumbnail(source: Bitmap, filter: ScanFilter, targetSize: Int = 120): Bitmap {
-        val aspect = source.width.toFloat() / source.height.toFloat()
+        val aspect = source.width.toFloat() / source.height.toFloat().coerceAtLeast(1f)
         val tw = if (aspect >= 1f) targetSize else (targetSize * aspect).toInt().coerceAtLeast(40)
         val th = if (aspect >= 1f) (targetSize / aspect).toInt().coerceAtLeast(40) else targetSize
 
         val scaled = Bitmap.createScaledBitmap(source, tw, th, true)
-        return processBitmap(scaled, filter, 0, 1.0f)
+        val processed = processBitmap(scaled, filter, 0, 1.0f)
+        if (processed !== scaled && !scaled.isRecycled) {
+            scaled.recycle()
+        }
+        return processed
     }
 
     /**
      * Compiles a collection of ScannedPages into a finalized Multi-Page PDF Document.
-     * Optionally embeds transparent, searchable OCR text operators for dual-layer PDF/A standard.
+     * Optionally embeds transparent, searchable OCR text operators (and user OCR text overrides) for dual-layer PDF/A standard.
      */
     suspend fun generatePdf(
         context: Context,
         pages: List<ScannedPage>,
         title: String,
         pageSizeA4: Boolean = true,
-        ocrResults: Map<Int, OcrPageResult>? = null
+        ocrResults: Map<Int, OcrPageResult>? = null,
+        ocrTextOverrides: Map<Int, String>? = null
     ): File = withContext(Dispatchers.IO) {
         val pdfDocument = PdfDocument()
 
@@ -275,9 +274,23 @@ object DocumentScanProcessor {
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
                 canvas.drawBitmap(processed, null, destRect, paint)
 
-                // Embed searchable OCR invisible text layer if available
+                // Embed searchable OCR invisible text layer if available (honoring user edits when present)
+                val customOverride = ocrTextOverrides?.get(index)?.trim()
                 val ocrPage = ocrResults?.get(index)
-                if (ocrPage != null && ocrPage.blocks.isNotEmpty()) {
+                if (!customOverride.isNullOrBlank()) {
+                    val ocrPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = android.graphics.Color.TRANSPARENT
+                        textSize = 10f
+                    }
+                    val overrideLines = customOverride.split('\n').filter { it.isNotBlank() }
+                    val lineStep = (destRect.height() / overrideLines.size.coerceAtLeast(1)).coerceIn(10f, 24f)
+                    overrideLines.forEachIndexed { lineIdx, lineText ->
+                        val y = destRect.top + 16f + (lineIdx * lineStep)
+                        if (y < destRect.bottom) {
+                            canvas.drawText(lineText, destRect.left + 12f, y, ocrPaint)
+                        }
+                    }
+                } else if (ocrPage != null && ocrPage.blocks.isNotEmpty()) {
                     val ocrPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         color = android.graphics.Color.TRANSPARENT // Transparent text layer in PDF stream
                     }
