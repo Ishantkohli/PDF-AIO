@@ -28,7 +28,7 @@ object SampleDocumentGenerator {
             generateNdaPdf(ndaFile)
         }
 
-        val techDocFile = File(sampleDir, "AI_Cloud_Architecture_Whitepaper.pdf")
+        val techDocFile = File(sampleDir, "Local_PDF_Architecture_Whitepaper.pdf")
         if (!techDocFile.exists() || techDocFile.length() == 0L) {
             generateTechWhitepaperPdf(techDocFile)
         }
@@ -88,8 +88,8 @@ object SampleDocumentGenerator {
 
         canvas.drawText("1. PURPOSE OF DISCLOSURE", 40f, y, headerPaint); y += 20f
         val p1Lines = listOf(
-            "The parties intend to explore a strategic partnership regarding Cloud Document Technologies,",
-            "proprietary machine learning models, and automated document workflow pipelines. In connection with",
+            "The parties intend to explore a strategic partnership regarding Local Document Technologies,",
+            "deterministic layout engines, and on-device document workflow pipelines. In connection with",
             "this prospective collaboration, either party may disclose confidential business and technical information."
         )
         for (l in p1Lines) {
@@ -259,16 +259,16 @@ object SampleDocumentGenerator {
         var canvas = page.canvas
 
         canvas.drawText("TECHNICAL WHITEPAPER", 40f, 45f, subPaint)
-        canvas.drawText("Next-Gen Intelligent Document Processing Architecture", 40f, 75f, titlePaint)
+        canvas.drawText("Next-Gen Local Document Processing Architecture", 40f, 75f, titlePaint)
         canvas.drawLine(40f, 95f, pageWidth - 40f, 95f, linePaint)
 
         var y = 130f
         canvas.drawText("EXECUTIVE ABSTRACT", 40f, y, subPaint); y += 20f
         val abstractLines = listOf(
-            "Modern enterprise document workflows demand zero-latency on-device processing combined with",
-            "high-reasoning multimodal cloud intelligence. This paper presents an end-to-end architecture for",
-            "client-side PDF rendering, vector annotation persistence, and contextual document reasoning with",
-            "thinking models that parse dense technical specifications in sub-second timeframes."
+            "Modern document workflows demand zero-latency on-device processing combined with",
+            "strictly local deterministic parsing. This paper presents an end-to-end architecture for",
+            "client-side PDF rendering, vector annotation persistence, and local text search across",
+            "large technical specifications in sub-second timeframes."
         )
         for (l in abstractLines) {
             canvas.drawText(l, 40f, y, bodyPaint); y += 16f
@@ -280,7 +280,7 @@ object SampleDocumentGenerator {
             "1. Client Native Rendering Engine: Leverages OS hardware accelerated rasterization.",
             "2. Non-Destructive Annotation Store: Maintains stroke vectors without altering original streams.",
             "3. Flattening and Export Pipeline: Synthesizes vector overlays into standardized PDF 1.7 standards.",
-            "4. Multimodal Reasoning Assistant: Streams semantic queries through specialized thinking models."
+            "4. Local Boundary & Reflow Engine: Computes page geometry and liquid reflow strictly on-device."
         )
         for (l in compLines) {
             canvas.drawText(l, 40f, y, bodyPaint); y += 18f
@@ -298,7 +298,7 @@ object SampleDocumentGenerator {
         canvas.drawLine(40f, 65f, pageWidth - 40f, 65f, linePaint)
         y = 100f
 
-        canvas.drawText("Table 1. Rendering and AI Inference Metrics Across Formats", 40f, y, bodyPaint); y += 20f
+        canvas.drawText("Table 1. Local Rendering and Reflow Metrics Across Formats", 40f, y, bodyPaint); y += 20f
 
         // Draw Table Header
         val thPaint = Paint().apply { color = Color.rgb(241, 245, 249) }
@@ -307,7 +307,7 @@ object SampleDocumentGenerator {
         canvas.drawText("Document Size", 50f, y + 17f, thText)
         canvas.drawText("Pages", 180f, y + 17f, thText)
         canvas.drawText("Raster Latency", 270f, y + 17f, thText)
-        canvas.drawText("AI Summary Latency", 400f, y + 17f, thText)
+        canvas.drawText("Text Reflow Latency", 400f, y + 17f, thText)
         y += 25f
 
         val rows = listOf(
@@ -327,7 +327,7 @@ object SampleDocumentGenerator {
 
         y += 40f
         canvas.drawText("CONCLUSION", 40f, y, subPaint); y += 20f
-        canvas.drawText("The hybrid architecture delivers exceptional user responsiveness while guaranteeing complete document privacy.", 40f, y, bodyPaint)
+        canvas.drawText("The local-first architecture delivers crisp user responsiveness while guaranteeing complete document privacy.", 40f, y, bodyPaint)
 
         canvas.drawText("Page 2 of 2 — Architecture Whitepaper", 40f, pageHeight - 35f, bodyPaint)
         doc.finishPage(page)
@@ -394,7 +394,7 @@ object SampleDocumentGenerator {
             listOf("PDF Viewer Native Engine Architecture", "40 hrs", "$150/hr", "$6,000.00"),
             listOf("Vector Annotation Layer & Pen Engine", "32 hrs", "$150/hr", "$4,800.00"),
             listOf("Digital Signature Capture & Stamp Vault", "24 hrs", "$150/hr", "$3,600.00"),
-            listOf("AI Document Assistant Integration (High Thinking)", "28 hrs", "$150/hr", "$4,200.00")
+            listOf("Local PDF Text Layout & Indexing Engine", "28 hrs", "$150/hr", "$4,200.00")
         )
 
         for (it in items) {

@@ -35,7 +35,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="PDF (AIO) • v5.2.0"
+        android:text="PDF (AIO) • v5.3.0"
         android:textColor="#94A3B8"
         android:textSize="10sp"
         android:maxLines="1"

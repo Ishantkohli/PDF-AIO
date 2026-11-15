@@ -1,5 +1,6 @@
 package com.example.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -17,5 +18,17 @@ data class DocumentEntity(
     val isFavorite: Boolean = false,
     val isSample: Boolean = false,
     val lastOpenedTimestamp: Long = System.currentTimeMillis(),
-    val fileSizeBytes: Long = 0L
+    val fileSizeBytes: Long = 0L,
+    @ColumnInfo(defaultValue = "")
+    val sourceUri: String = "",
+    @ColumnInfo(defaultValue = "0")
+    val isPinned: Boolean = false,
+    @ColumnInfo(defaultValue = "General")
+    val folderCategory: String = "General",
+    @ColumnInfo(defaultValue = "")
+    val author: String = "",
+    @ColumnInfo(defaultValue = "")
+    val subject: String = "",
+    @ColumnInfo(defaultValue = "")
+    val keywords: String = ""
 )

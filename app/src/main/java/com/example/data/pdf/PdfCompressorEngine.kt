@@ -176,7 +176,7 @@ object PdfCompressorEngine {
 
             val timeTaken = System.currentTimeMillis() - startTime
 
-            Log.d(TAG, "Compressed ${inputFile.name}: $originalSize -> $compressedSize bytes (${String.format(Locale.US, "%.1f", reductionPercent)}% saved in ${timeTaken}ms)")
+            Log.d(TAG, "Compressed PDF: $originalSize -> $compressedSize bytes (${String.format(Locale.US, "%.1f", reductionPercent)}% saved in ${timeTaken}ms)")
 
             CompressionResult(
                 isSuccess = true,
@@ -189,7 +189,7 @@ object PdfCompressorEngine {
                 timeTakenMs = timeTaken
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to compress PDF: ${inputFile.name}", e)
+            Log.e(TAG, "Failed to compress PDF", e)
             CompressionResult(
                 isSuccess = false,
                 outputFile = null,

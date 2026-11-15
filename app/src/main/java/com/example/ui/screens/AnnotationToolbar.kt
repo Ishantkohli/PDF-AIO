@@ -12,12 +12,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.BrandingWatermark
 import androidx.compose.material.icons.automirrored.filled.Comment
+import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.RotateRight
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -26,9 +29,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.AnnotationTool
 import com.example.ui.PdfViewModel
 import com.example.ui.theme.*
+import kotlin.math.roundToInt
 
 @Composable
 fun AnnotationToolbar(
@@ -47,6 +52,14 @@ fun AnnotationToolbar(
     var showColorPicker by remember { mutableStateOf(false) }
     var showStampMenu by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+    val canUndo by viewModel.canUndo.collectAsStateWithLifecycle()
+    val canRedo by viewModel.canRedo.collectAsStateWithLifecycle()
+    val activeOpacity by viewModel.activeOpacity.collectAsStateWithLifecycle()
+
+    val supportsColorPalette = activeTool == AnnotationTool.PEN ||
+        activeTool == AnnotationTool.HIGHLIGHT ||
+        activeTool == AnnotationTool.UNDERLINE ||
+        activeTool == AnnotationTool.STRIKETHROUGH
 
     Column(
         modifier = modifier
@@ -54,9 +67,9 @@ fun AnnotationToolbar(
             .padding(horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Sub-palette for Pen / Highlighter Colors & Widths
+        // Sub-palette for Pen / Highlighter / Underline / Strikethrough Colors, Widths & Opacity
         AnimatedVisibility(
-            visible = showColorPicker && (activeTool == AnnotationTool.PEN || activeTool == AnnotationTool.HIGHLIGHT),
+            visible = showColorPicker && supportsColorPalette,
             enter = fadeIn() + expandVertically(),
             exit = fadeOut() + shrinkVertically()
         ) {
@@ -65,68 +78,97 @@ fun AnnotationToolbar(
                 color = AcrobatDarkSurfaceElevated,
                 shadowElevation = 8.dp,
                 border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(AcrobatDarkBorder)),
-                modifier = Modifier
-                    .padding(bottom = 8.dp)
+                modifier = Modifier.padding(bottom = 8.dp)
             ) {
-                Row(
+                Column(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val colors: List<Pair<Long, String>> = if (activeTool == AnnotationTool.HIGHLIGHT) {
-                        listOf(
-                            0x66FDE047L to "Yellow",
-                            0x6686EFACL to "Green",
-                            0x66F472B6L to "Pink",
-                            0x6667E8F9L to "Cyan"
-                        )
-                    } else {
-                        listOf(
-                            0xFFDC2626L to "Crimson Red",
-                            0xFF2563EBL to "Royal Blue",
-                            0xFF0F172AL to "Obsidian Black",
-                            0xFF059669L to "Emerald Green"
-                        )
-                    }
-
-                    colors.forEach { (colorVal, _) ->
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(Color(colorVal))
-                                .border(
-                                    width = if (activeColor == colorVal) 2.5.dp else 1.dp,
-                                    color = if (activeColor == colorVal) Color.White else Color.Transparent,
-                                    shape = CircleShape
-                                )
-                                .clickable {
-                                    viewModel.setActiveColor(colorVal)
-                                    showColorPicker = false
-                                }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(modifier = Modifier.width(1.dp).height(20.dp).background(AcrobatDarkBorder))
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    // Stroke width choices
-                    listOf(2f to "Fine", 4f to "Medium", 8f to "Thick").forEach { (width, label) ->
-                        TextButton(
-                            onClick = {
-                                viewModel.setActiveStrokeWidth(width)
-                                showColorPicker = false
-                            },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (viewModel.activeStrokeWidth.value == width) CrimsonAccent else AcrobatTextSecondary,
-                                fontWeight = if (viewModel.activeStrokeWidth.value == width) FontWeight.Bold else FontWeight.Normal
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        val colors: List<Pair<Long, String>> = if (activeTool == AnnotationTool.HIGHLIGHT) {
+                            listOf(
+                                0x66FDE047L to "Yellow",
+                                0x6686EFACL to "Green",
+                                0x66F472B6L to "Pink",
+                                0x6667E8F9L to "Cyan",
+                                0x66C084FCL to "Violet"
+                            )
+                        } else {
+                            listOf(
+                                0xFFDC2626L to "Crimson Red",
+                                0xFF2563EBL to "Royal Blue",
+                                0xFF0F172AL to "Obsidian Black",
+                                0xFF059669L to "Emerald Green",
+                                0xFFF59E0BL to "Amber",
+                                0xFF9333EAL to "Purple"
                             )
                         }
+
+                        colors.forEach { (colorVal, _) ->
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(colorVal))
+                                    .border(
+                                        width = if (activeColor == colorVal) 2.5.dp else 1.dp,
+                                        color = if (activeColor == colorVal) Color.White else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickable {
+                                        viewModel.setActiveColor(colorVal)
+                                    }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(modifier = Modifier.width(1.dp).height(20.dp).background(AcrobatDarkBorder))
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        // Stroke width choices
+                        listOf(2f to "Fine", 4f to "Medium", 8f to "Thick").forEach { (width, label) ->
+                            TextButton(
+                                onClick = {
+                                    viewModel.setActiveStrokeWidth(width)
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (viewModel.activeStrokeWidth.value == width) CrimsonAccent else AcrobatTextSecondary,
+                                    fontWeight = if (viewModel.activeStrokeWidth.value == width) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Opacity ${(activeOpacity * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AcrobatTextSecondary,
+                            modifier = Modifier.widthIn(min = 82.dp)
+                        )
+                        Slider(
+                            value = activeOpacity,
+                            onValueChange = { viewModel.setActiveOpacity(it) },
+                            valueRange = 0.25f..1.0f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = CrimsonAccent,
+                                activeTrackColor = CrimsonAccent
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(26.dp)
+                        )
                     }
                 }
             }
@@ -150,6 +192,41 @@ fun AnnotationToolbar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                // Undo
+                ToolIconButton(
+                    icon = Icons.AutoMirrored.Filled.Undo,
+                    label = "Undo",
+                    isSelected = false,
+                    enabled = canUndo,
+                    selectedColor = AdfElectricCyan,
+                    customTestTag = "tool_undo",
+                    onClick = { viewModel.undoLastAnnotation() }
+                )
+
+                // Redo
+                ToolIconButton(
+                    icon = Icons.AutoMirrored.Filled.Redo,
+                    label = "Redo",
+                    isSelected = false,
+                    enabled = canRedo,
+                    selectedColor = AdfElectricCyan,
+                    customTestTag = "tool_redo",
+                    onClick = { viewModel.redoLastAnnotation() }
+                )
+
+                // Select Text Tool
+                ToolIconButton(
+                    icon = Icons.Default.SelectAll,
+                    label = "Select Text",
+                    isSelected = activeTool == AnnotationTool.TEXT_SELECT,
+                    selectedColor = Color(0xFF38BDF8),
+                    customTestTag = "tool_select_text",
+                    onClick = {
+                        viewModel.setActiveTool(AnnotationTool.TEXT_SELECT)
+                        showColorPicker = false
+                    }
+                )
+
                 // Freehand Pen
                 ToolIconButton(
                     icon = Icons.Default.Edit,
@@ -181,6 +258,42 @@ fun AnnotationToolbar(
                             viewModel.setActiveTool(AnnotationTool.HIGHLIGHT)
                             viewModel.setActiveColor(0x66FDE047)
                             viewModel.setActiveStrokeWidth(16f)
+                            showColorPicker = true
+                        }
+                    }
+                )
+
+                // Underline
+                ToolIconButton(
+                    icon = Icons.Default.FormatUnderlined,
+                    label = "Underline",
+                    isSelected = activeTool == AnnotationTool.UNDERLINE,
+                    selectedColor = Color(0xFF10B981),
+                    onClick = {
+                        if (activeTool == AnnotationTool.UNDERLINE) {
+                            showColorPicker = !showColorPicker
+                        } else {
+                            viewModel.setActiveTool(AnnotationTool.UNDERLINE)
+                            viewModel.setActiveColor(0xFF2563EB)
+                            viewModel.setActiveStrokeWidth(3f)
+                            showColorPicker = true
+                        }
+                    }
+                )
+
+                // Strikethrough
+                ToolIconButton(
+                    icon = Icons.Default.FormatStrikethrough,
+                    label = "Strike",
+                    isSelected = activeTool == AnnotationTool.STRIKETHROUGH,
+                    selectedColor = Color(0xFFEC4899),
+                    onClick = {
+                        if (activeTool == AnnotationTool.STRIKETHROUGH) {
+                            showColorPicker = !showColorPicker
+                        } else {
+                            viewModel.setActiveTool(AnnotationTool.STRIKETHROUGH)
+                            viewModel.setActiveColor(0xFFDC2626)
+                            viewModel.setActiveStrokeWidth(3f)
                             showColorPicker = true
                         }
                     }
@@ -266,7 +379,19 @@ fun AnnotationToolbar(
                     }
                 )
 
-                // Whiteout / Redact & Edit Content
+                // Form Fill Assistant
+                ToolIconButton(
+                    icon = Icons.Default.DynamicForm,
+                    label = "Form",
+                    isSelected = activeTool == AnnotationTool.FORM_FIELD,
+                    selectedColor = AdfElectricCyan,
+                    onClick = {
+                        viewModel.setActiveTool(AnnotationTool.FORM_FIELD)
+                        showColorPicker = false
+                    }
+                )
+
+                // Whiteout / Edit Content
                 ToolIconButton(
                     icon = Icons.Default.LayersClear,
                     label = "Whiteout",
@@ -274,6 +399,18 @@ fun AnnotationToolbar(
                     selectedColor = Color(0xFFF43F5E),
                     onClick = {
                         viewModel.setActiveTool(AnnotationTool.WHITEOUT)
+                        showColorPicker = false
+                    }
+                )
+
+                // Permanent Redaction Mark
+                ToolIconButton(
+                    icon = Icons.Default.VisibilityOff,
+                    label = "Redact",
+                    isSelected = activeTool == AnnotationTool.REDACT,
+                    selectedColor = Color(0xFFEF4444),
+                    onClick = {
+                        viewModel.setActiveTool(AnnotationTool.REDACT)
                         showColorPicker = false
                     }
                 )
@@ -342,7 +479,7 @@ fun AnnotationToolbar(
                         viewModel.setActiveTool(AnnotationTool.NONE)
                         showColorPicker = false
                     },
-                    modifier = Modifier.size(38.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
@@ -362,6 +499,8 @@ fun ToolIconButton(
     label: String,
     isSelected: Boolean,
     selectedColor: Color,
+    enabled: Boolean = true,
+    customTestTag: String? = null,
     onClick: () -> Unit
 ) {
     Surface(
@@ -373,9 +512,11 @@ fun ToolIconButton(
             )
         ),
         modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .alpha(if (enabled) 1f else 0.38f)
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .testTag("tool_${label.lowercase().replace(" ", "_")}")
+            .clickable(enabled = enabled, onClick = onClick)
+            .testTag(customTestTag ?: "tool_${label.lowercase().replace(" ", "_")}")
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),

@@ -38,8 +38,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.ClipData
 import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.example.data.local.DocumentEntity
 import com.example.data.pdf.DocumentConverterEngine
@@ -48,6 +50,7 @@ import com.example.data.pdf.PdfMergeItem
 import com.example.ui.AppScreen
 import com.example.ui.PdfViewModel
 import com.example.ui.theme.*
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -153,6 +156,16 @@ fun ToolsScreen(viewModel: PdfViewModel) {
                     onClick = { selectedToolTab = 9 },
                     text = { Text("TXT to PDF", fontWeight = if (selectedToolTab == 9) FontWeight.Bold else FontWeight.Normal) }
                 )
+                Tab(
+                    selected = selectedToolTab == 10,
+                    onClick = { selectedToolTab = 10 },
+                    text = { Text("Security & Meta", fontWeight = if (selectedToolTab == 10) FontWeight.Bold else FontWeight.Normal) }
+                )
+                Tab(
+                    selected = selectedToolTab == 11,
+                    onClick = { selectedToolTab = 11 },
+                    text = { Text("Batch Studio", fontWeight = if (selectedToolTab == 11) FontWeight.Bold else FontWeight.Normal) }
+                )
             }
 
             when (selectedToolTab) {
@@ -166,6 +179,8 @@ fun ToolsScreen(viewModel: PdfViewModel) {
                 7 -> com.example.ui.screens.tools.PdfCompressorTab(viewModel = viewModel, documents = documents, currentDoc = currentDoc)
                 8 -> PdfToTxtTab(viewModel = viewModel, documents = documents)
                 9 -> TxtToPdfTab(viewModel = viewModel)
+                10 -> com.example.ui.screens.tools.SecurityAndMetadataTab(viewModel = viewModel, documents = documents, currentDoc = currentDoc)
+                11 -> com.example.ui.screens.tools.BatchProcessingTab(viewModel = viewModel, documents = documents)
             }
         }
     }
@@ -1033,10 +1048,14 @@ fun MergePdfsTab(viewModel: PdfViewModel, documents: List<DocumentEntity>) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedButton(
                         onClick = {
-                            val shareUri = Uri.parse(doc.uriString)
+                            val pdfFile = File(doc.filePath)
+                            val shareUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdfFile)
                             val intent = Intent(Intent.ACTION_SEND).apply {
                                 type = "application/pdf"
                                 putExtra(Intent.EXTRA_STREAM, shareUri)
+                                putExtra(Intent.EXTRA_SUBJECT, "${doc.title}.pdf")
+                                putExtra(Intent.EXTRA_TITLE, "${doc.title}.pdf")
+                                clipData = ClipData.newUri(context.contentResolver, "${doc.title}.pdf", shareUri)
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
                             context.startActivity(Intent.createChooser(intent, "Share Merged PDF"))

@@ -1,25 +1,33 @@
-# Accessibility Statement and General Disclaimer
+# PDF (AIO) — Accessibility Statement and General Disclaimer
 
-**Last updated:** [PLACEHOLDER: 2026-10-20]
+**Effective date:** 15 November 2026  
+**Last updated:** 15 November 2026  
+**Application:** PDF (AIO) (`com.aistudio.acrobatreader.hptwqz`, v5.3.0)  
+**Website:** https://ishantkohli.github.io/Web  
+**Contact:** ishantkohlikohli@gmail.com
 
-## Accessibility
+---
 
-PDF AIO aims to make its interface usable by as many people as possible. Accessibility improvements may include keyboard navigation, visible focus indicators, sufficient color contrast, meaningful labels, responsive layouts, and reduced-motion support.
+## 1. Accessibility Commitment & Current Status
 
-**Current status:** [PLACEHOLDER: Ishant Kohli]. Do not claim WCAG compliance without an appropriate assessment.
+**PDF (AIO)** is built with Jetpack Compose and Material Design 3 to support accessible navigation, including `contentDescription` labels on primary icons/controls, scalable typography (`sp`), adaptive widths for foldables and tablets, hardware navigation back handling, `48dp` minimum touch targets on primary interactive controls, and **6 selectable themes** (`Liquid Glass`, `Midnight Glass`, `OLED Deep Glass`, `Sunset Liquid Glass`, `Emerald Liquid Glass`, and `Frosted Crystal Glass`).
 
-To report an accessibility issue, contact [PLACEHOLDER: ishantkohlikohli@gmail.com ]. Include the page or feature affected and, if you wish, the assistive technology or browser involved.
+**Honest Compliance Status:** Formal accessibility certification (such as full WCAG 2.1 Level AA or Section 508 conformance auditing across every custom Canvas reader, PDF overlay, and CameraX scanner surface) has **not yet been completed**. We do not claim certified WCAG compliance without a dedicated assessment.  
+`[TODO: Conduct a comprehensive TalkBack, Switch Access, and color-contrast audit across custom Canvas overlays before publishing any formal accessibility conformance claim.]`
 
-## General information disclaimer
+To report an accessibility barrier, email **ishantkohlikohli@gmail.com** describing the screen, control, and assistive technology involved.
 
-Information and utilities in ADF AIO are provided for general convenience unless a feature explicitly states otherwise. You are responsible for verifying important outputs before relying on them. The App is not a substitute for qualified professional advice.
+## 2. General Accuracy & Utility Disclaimer
 
-## External services disclaimer
+PDF (AIO) provides offline reading, scanning, splitting, merging, diff comparison, conversion, encryption, and redaction utilities for general convenience:
 
-External websites, platforms, and embedded content are operated by third parties. Their availability, content, policies, and practices may change independently of ADF AIO.
+- Always verify extracted text, Word/TXT conversions, diff reports, and redacted files before relying on them in legal, financial, medical, or regulatory contexts.
+- Image-only scanned PDFs intentionally do not expose embedded text layers without external/dedicated OCR; PDF (AIO) includes zero hidden cloud OCR or AI/ML inference.
 
-## Availability disclaimer
+## 3. External Websites & Third-Party Receivers
 
-We aim to maintain a useful and reliable service but cannot guarantee that all features will always be available, error-free, or compatible with every device.
+External browser links (`https://ishantkohli.github.io/Web`, social links) and third-party receiving apps opened from PDF (AIO) operate independently and may modify, store, or rename shared copies according to their own behaviors and terms.
 
-Nothing in this statement limits rights or remedies that cannot be limited under applicable law.
+## 4. Service Availability Disclaimer
+
+While we strive for high stability, compatibility, and performance across Android devices, no guarantee is made that every feature will operate identically on every OEM device or third-party Storage Access Framework provider. Mandatory statutory consumer protections remain unaffected.

@@ -196,7 +196,7 @@ object DeviceDocumentScanner {
                     scanDirectoryRecursively(dir, resultList, visitedKeys, maxDepth = 4)
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Targeted dir scan failed for ${dir.path}: ${e.message}")
+                Log.w(TAG, "Targeted dir scan failed: ${e.message}")
             }
         }
 

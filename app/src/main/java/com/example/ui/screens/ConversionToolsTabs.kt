@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.content.Context
+import android.content.ClipData
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -296,6 +297,8 @@ fun PdfToImagesTab(
                                         val intent = Intent(Intent.ACTION_SEND).apply {
                                             type = "application/zip"
                                             putExtra(Intent.EXTRA_STREAM, uri)
+                                            putExtra(Intent.EXTRA_SUBJECT, zip.name)
+                                            clipData = ClipData.newUri(context.contentResolver, zip.name, uri)
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                         }
                                         context.startActivity(Intent.createChooser(intent, "Share Images ZIP"))
@@ -682,6 +685,8 @@ fun PdfToWordTab(
                                         val intent = Intent(Intent.ACTION_SEND).apply {
                                             type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                             putExtra(Intent.EXTRA_STREAM, uri)
+                                            putExtra(Intent.EXTRA_SUBJECT, wordFile.name)
+                                            clipData = ClipData.newUri(context.contentResolver, wordFile.name, uri)
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                         }
                                         context.startActivity(Intent.createChooser(intent, "Share Word Document"))
@@ -1144,6 +1149,8 @@ fun PdfToTxtTab(
                                             val intent = Intent(Intent.ACTION_SEND).apply {
                                                 type = "text/plain"
                                                 putExtra(Intent.EXTRA_STREAM, uri)
+                                                putExtra(Intent.EXTRA_SUBJECT, txtFile.name)
+                                                clipData = ClipData.newUri(context.contentResolver, txtFile.name, uri)
                                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                             }
                                             context.startActivity(Intent.createChooser(intent, "Share TXT File"))

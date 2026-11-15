@@ -1,69 +1,32 @@
-# Cookie and Form Consent
+# PDF (AIO) — Consent and User Choice Notice
 
-**Effective date:** [PLACEHOLDER: 2026-10-20]
+**Effective date:** 15 November 2026  
+**Last updated:** 15 November 2026  
+**Application:** PDF (AIO) (`com.aistudio.acrobatreader.hptwqz`, v5.3.0)  
+**Website:** https://ishantkohli.github.io/Web  
+**Contact:** ishantkohlikohli@gmail.com
 
-This document defines recommended consent language and implementation requirements for ADF AIO. Use only the options that correspond to features actually present in the App.
+---
 
-## 1. Cookie banner copy
+## 1. Android App Consent Model (No Ad/Cookie Wall)
 
-**Heading:** Your privacy choices
+Because **PDF (AIO) v5.3.0** operates with **zero analytics SDKs, zero advertising identifiers, and zero browser cookies**, the Android application does **not** show intrusive third-party ad/tracking consent banners.
 
-**Message:** ADF AIO may use essential storage to keep the app working. With your permission, we may also use optional technologies for preferences, analytics, or embedded content. You can accept all optional categories, reject optional categories, or choose settings. You can change your choice later.
+## 2. Explicit User-Controlled Permissions & Actions
 
-**Buttons:**
-- Accept all
-- Reject optional
-- Customize
+Device permissions and external submissions operate under explicit Android OS controls or user action:
 
-Essential technologies should be separated from optional categories. Do not make “Accept all” the only practical option.
+- **Document Scanner / QR Scanner (`CAMERA`):** Requested only when you open the camera scanner workflow.
+- **Internal & External (SD Card) Storage Access:** Prompts you with transparent Android permissions (`READ_EXTERNAL_STORAGE` / `MANAGE_EXTERNAL_STORAGE`) for full library discovery, while also letting you use Android's zero-permission file picker / SAF folder picker at any time.
+- **Feedback Form & Local Drafts:** Nothing is sent unless you explicitly fill out the form and tap **Submit Feedback to Developer**. Drafts are saved locally (`user_feedback_records`) so you can retry, open your email app, edit, or delete entries anytime.
+- **Updates Notifications (`POST_NOTIFICATIONS`):** Requested transparently on Android 13+ so update availability alerts from the GitHub Releases checker can be displayed if granted.
 
-## 2. Suggested preference categories
+## 3. Website Form & Browser Reference Guidance (`https://ishantkohli.github.io/Web`)
 
-- **Essential — always active:** required for a feature you request, security, or core operation.
-- **Preferences — optional:** saves non-essential preferences.
-- **Analytics — optional:** usage measurement and performance analysis.
-- **Marketing — optional:** advertising or marketing measurement, only if used.
-- **External embeds — optional where required:** third-party content that may contact an external provider.
+If optional web forms, analytics, or embeds are ever deployed on the companion website (`https://ishantkohli.github.io/Web`), the developer should follow the static consent pattern in `consent/consent-copy.html` ensuring:
 
-Keep optional categories off by default where prior consent is required.
+- No optional tracking or marketing checkbox is pre-selected.
+- Accept and Reject choices are equally accessible before any optional scripts load.
+- Privacy acknowledgements clearly explain where any web form delivers submitted data.
 
-## 3. Form consent copy
-
-For a general contact or feedback form:
-
-> **Required acknowledgement:** I have read the Privacy Policy and understand how ADF AIO will use the information I submit to respond to my request.
-
-Use an acknowledgement only if it accurately describes the form. A privacy-policy acknowledgement is not automatically the legal basis for processing.
-
-For optional marketing communications, use a separate unchecked box:
-
-> **Optional:** I would like to receive product updates and announcements from ADF AIO. I can unsubscribe at any time.
-
-Do not bundle marketing consent with a support request or make it a condition of using an unrelated feature.
-
-## 4. Consent records
-
-Where appropriate and lawful, record:
-- Consent timestamp (UTC).
-- Policy/banner version.
-- Categories accepted or rejected.
-- Consent method and relevant configuration.
-- Withdrawal or preference changes.
-
-Collect only what is necessary to demonstrate the user's choice. Avoid storing unnecessary identifying data or fingerprinting users.
-
-## 5. Implementation checklist
-
-- No optional category is preselected.
-- Accept and reject options are comparably easy to use.
-- Optional scripts and embeds do not load before required consent.
-- The user can reopen settings and withdraw consent.
-- Consent controls are keyboard accessible and work with assistive technology.
-- The banner does not repeatedly reappear after a valid choice unless the consent expires or the policy materially changes.
-- Do not use a consent wall unless legally justified.
-- Ensure consent storage itself does not depend on optional analytics.
-- Test in a clean browser profile and inspect network requests before and after consent.
-
-## 6. Important
-
-This document is not proof that the current application already implements these controls. The code must be updated and tested to match the published behavior.
+`[TODO: Verify live https://ishantkohli.github.io/Web web form configuration before deploying any live consent banner there.]`

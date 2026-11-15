@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -49,6 +50,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.example.BuildConfig
+import com.example.ui.AppScreen
 import com.example.ui.PdfViewModel
 import com.example.ui.components.AdfIcon
 import com.example.ui.components.ShareAppCard
@@ -73,7 +75,7 @@ data class SocialPlatformInfo(
  * Optimized PDF (AIO) Credit & Developer Screen
  * Universal compatibility for every phone worldwide (small, foldables, tablets).
  * Features 30 FPS capped electrical neon borders, 8 social media platforms,
- * and official verified developer credentials (Ishant Kohli, Google AI Studio, 10/10/2026).
+ * and official developer credentials (Ishant Kohli, PDF (AIO) v5.3.0).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -163,7 +165,7 @@ fun CreditScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ishantkohli.me/Media/media.html"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ishantkohli.github.io/Web"))
                             context.startActivity(intent)
                         },
                         modifier = Modifier.testTag("credits_web_link_button")
@@ -207,10 +209,66 @@ fun CreditScreen(
                 item {
                     DeveloperCredentialsCard(
                         onOpenWebsite = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ishantkohli.me/Media/media.html"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ishantkohli.github.io/Web"))
                             context.startActivity(intent)
                         }
                     )
+                }
+
+                // Section 1.05: In-App Legal & Privacy Center Access
+                item {
+                    Surface(
+                        onClick = { viewModel.navigateTo(AppScreen.LEGAL_CENTER) },
+                        shape = RoundedCornerShape(16.dp),
+                        color = AdfObsidianSurface,
+                        border = CardDefaults.outlinedCardBorder().copy(
+                            brush = Brush.horizontalGradient(listOf(AdfElectricCyan.copy(alpha = 0.5f), AdfCyberViolet.copy(alpha = 0.5f)))
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .testTag("credits_legal_center_button")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(AdfElectricCyan.copy(alpha = 0.16f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Policy,
+                                        contentDescription = "Legal & Privacy Center",
+                                        tint = AdfElectricCyan,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Legal & Privacy Center",
+                                        color = AdfTextPrimary,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "10 official policies • Copy, Share & Contact",
+                                        color = AdfTextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                            AdfIcon.ChevronRight(size = 18.dp, color = AdfElectricCyan)
+                        }
+                    }
                 }
 
                 // Section 1.1: Feedback Form Section (Directly after Developer section)
@@ -457,13 +515,13 @@ fun CreditScreen(
 
                             val specs = listOf(
                                 "Application Name" to "PDF (AIO) (All-In-One)",
+                                "Release Version" to "v5.3.0 (Build 530)",
                                 "Lead Architect" to "Ishant Kohli",
-                                "Engineering Partner" to "Google AI Studio",
-                                "Official Build Date" to "10/10/2026",
+                                "Licensing Contact" to "ishantkohlikohli@gmail.com",
+                                "Copyright" to "© 2026 Ishant Kohli. All rights reserved.",
                                 "Display Refresh Rates" to "60 / 90 / 120 / 144 / 165 FPS Hardware Sync",
-                                "Frame-Rate Limiter" to "30 FPS Strict Cap on Showcase & Electrical Waves",
-                                "Security Layer" to "Zero-Cloud On-Device Local Processing",
-                                "Primary Stack" to "Kotlin • Jetpack Compose • Room • Coroutines Flow"
+                                "Security Layer" to "100% Local On-Device Processing (Zero AI/Cloud)",
+                                "Core Stack" to "Kotlin • Jetpack Compose • Room • CameraX • PDFBox-Android (Apache 2.0)"
                             )
                             specs.forEach { (title, detail) ->
                                 Row(
@@ -486,7 +544,7 @@ fun CreditScreen(
 }
 
 /**
- * Top Developer Credentials Card with Build Date & Verified Badges
+ * Top Developer Credentials Card with Proprietary License & Open-Source Attribution
  */
 @Composable
 fun DeveloperCredentialsCard(
@@ -534,7 +592,7 @@ fun DeveloperCredentialsCard(
                             letterSpacing = 1.sp
                         )
                         Text(
-                            text = "Developer & Engineering",
+                            text = "Developer & Licensing",
                             color = Color.White,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
@@ -550,7 +608,7 @@ fun DeveloperCredentialsCard(
                     )
                 ) {
                     Text(
-                        text = "10/10/2026",
+                        text = "v5.3.0",
                         color = Color(0xFF10B981),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -564,12 +622,19 @@ fun DeveloperCredentialsCard(
             HorizontalDivider(color = AdfBorderSubtle)
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 3 Explicit Credentials requested by user:
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                CredentialRow("Build By", "Ishant Kohli", "CREATOR", AdfElectricCyan)
-                CredentialRow("Coded By", "Google AI Studio", "AI ENGINE", Color(0xFFD946EF))
-                CredentialRow("App Official Build Date", "10/10/2026", "GOLD RELEASE", Color(0xFF10B981))
+                CredentialRow("Created By", "Ishant Kohli", "COPYRIGHT HOLDER", AdfElectricCyan)
+                CredentialRow("Processing Mode", "100% On-Device", "LOCAL PRIVACY", Color(0xFF10B981))
+                CredentialRow("Open-Source Engine", "Apache PDFBox-Android & CameraX", "APACHE-2.0", Color(0xFF38BDF8))
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Copyright © 2026 Ishant Kohli. All rights reserved. Proprietary software — see root LICENSE for terms. Contact: ishantkohlikohli@gmail.com.",
+                color = AdfTextMuted,
+                fontSize = 10.5.sp,
+                lineHeight = 14.sp
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -589,7 +654,7 @@ fun DeveloperCredentialsCard(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "🌐 ishantkohli.me/Media",
+                        text = "https://ishantkohli.github.io/Web",
                         color = AdfTextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold

@@ -37,7 +37,7 @@
             android:background="@drawable/widget_tile_glass_bg"
             android:paddingHorizontal="7dp"
             android:paddingVertical="2dp"
-            android:text="6 Tools • v5.2.0"
+            android:text="6 Tools • v5.3.0"
             android:textColor="#38BDF8"
             android:textSize="10sp"
             android:textStyle="bold" />

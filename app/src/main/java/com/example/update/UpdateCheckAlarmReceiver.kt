@@ -6,80 +6,89 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * Background BroadcastReceiver that runs periodically (or on device reboot)
- * to query GitHub Releases for new updates and trigger system shade notifications.
+ * Periodic 8-hour background GitHub Releases update check receiver, rescheduled on device boot.
  */
 class UpdateCheckAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
-        Log.d("UpdateAlarmReceiver", "Received background update check action: $action")
+        Log.d(TAG, "Received action: $action")
 
-        val pendingResult = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val result = UpdateManager.checkForUpdates(context)
-                result.onSuccess { releaseInfo ->
-                    if (releaseInfo != null) {
-                        Log.i("UpdateAlarmReceiver", "Background check found new release v${releaseInfo.versionName}! Posting notification...")
-                        UpdateNotificationHelper.showUpdateNotification(context, releaseInfo)
-                    }
+        if (action == Intent.ACTION_BOOT_COMPLETED) {
+            schedulePeriodicCheck(context)
+        }
+
+        if (action == ACTION_CHECK_UPDATE || action == Intent.ACTION_BOOT_COMPLETED) {
+            val pendingResult = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    UpdateManager.checkForUpdates(context.applicationContext)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Background update check failed: ${e.message}")
+                } finally {
+                    try {
+                        pendingResult.finish()
+                    } catch (_: Exception) {}
                 }
-            } catch (e: Exception) {
-                Log.e("UpdateAlarmReceiver", "Error in background update check: ${e.message}", e)
-            } finally {
-                if (action == Intent.ACTION_BOOT_COMPLETED) {
-                    scheduleNextAlarm(context)
-                }
-                pendingResult.finish()
             }
         }
     }
 
     companion object {
+        private const val TAG = "UpdateAlarmReceiver"
         const val ACTION_CHECK_UPDATE = "com.example.update.ACTION_CHECK_UPDATE_BACKGROUND"
+        private const val REQUEST_CODE = 2001
+        private const val INTERVAL_8_HOURS_MS = 8L * 60L * 60L * 1000L
 
-        /**
-         * Schedule periodic background update check alarm (runs every 8 hours).
-         */
-        fun scheduleNextAlarm(context: Context) {
+        fun schedulePeriodicCheck(context: Context) {
             try {
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
                 val intent = Intent(context, UpdateCheckAlarmReceiver::class.java).apply {
                     action = ACTION_CHECK_UPDATE
                 }
-
                 val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 } else {
                     PendingIntent.FLAG_UPDATE_CURRENT
                 }
-
-                val pendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    2001,
-                    intent,
-                    flags
-                )
-
-                val intervalMs = 8 * 60 * 60 * 1000L // 8 hours
-                val triggerAtMs = System.currentTimeMillis() + intervalMs
+                val pendingIntent = PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
+                val firstTriggerAt = SystemClock.elapsedRealtime() + INTERVAL_8_HOURS_MS
 
                 alarmManager.setInexactRepeating(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAtMs,
-                    intervalMs,
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    firstTriggerAt,
+                    INTERVAL_8_HOURS_MS,
                     pendingIntent
                 )
-                Log.d("UpdateAlarmReceiver", "Next background update alarm scheduled in 8 hours.")
             } catch (e: Exception) {
-                Log.e("UpdateAlarmReceiver", "Failed to schedule background update alarm: ${e.message}", e)
+                Log.w(TAG, "Could not schedule periodic update check: ${e.message}")
+            }
+        }
+
+        fun cancelScheduledAlarm(context: Context) {
+            try {
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+                val intent = Intent(context, UpdateCheckAlarmReceiver::class.java).apply {
+                    action = ACTION_CHECK_UPDATE
+                }
+                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+                } else {
+                    PendingIntent.FLAG_NO_CREATE
+                }
+                val existing = PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
+                if (existing != null) {
+                    alarmManager.cancel(existing)
+                    existing.cancel()
+                }
+            } catch (_: Exception) {
             }
         }
     }

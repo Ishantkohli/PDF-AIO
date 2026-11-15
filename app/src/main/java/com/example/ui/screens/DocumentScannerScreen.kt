@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -39,12 +40,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.example.data.local.DocumentEntity
+import com.example.data.scan.DocumentEdgeDetector
 import com.example.data.scan.DocumentOcrEngine
 import com.example.data.scan.DocumentScanProcessor
 import com.example.data.scan.OcrPageResult
@@ -53,6 +55,8 @@ import com.example.data.scan.ScannedPage
 import com.example.ui.AppScreen
 import com.example.ui.PdfViewModel
 import com.example.ui.components.AdfIcon
+import com.example.ui.screens.scanner.CameraXDocumentCaptureView
+import com.example.ui.screens.scanner.PerspectiveCropOverlay
 import com.example.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -94,8 +98,17 @@ fun DocumentScannerScreen(
     var showOcrDialog by remember { mutableStateOf(false) }
     var editedTextMap by remember { mutableStateOf<MutableMap<Int, String>>(mutableMapOf()) }
 
-    var tempCameraImageUri by remember { mutableStateOf<Uri?>(null) }
+    var isAutoCaptureEnabled by remember { mutableStateOf(true) }
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.CAMERA
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
     val trackedTempFiles = remember { mutableListOf<File>() }
+    val detectedQuadHints = remember { mutableStateMapOf<String, DocumentEdgeDetector.NormalizedQuad>() }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -108,51 +121,34 @@ fun DocumentScannerScreen(
         }
     }
 
-    // Creates a temporary file in cache for full-resolution camera captures
-    fun createTempImageUri(): Uri {
-        val tempFile = File.createTempFile(
+    fun createTempCaptureFile(): File {
+        return File.createTempFile(
             "scan_capture_${System.currentTimeMillis()}",
             ".jpg",
             context.cacheDir
-        ).apply { createNewFile() }
-        trackedTempFiles.add(tempFile)
-        return FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            tempFile
-        )
-    }
-
-    // Camera Take-Picture Launcher
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success && tempCameraImageUri != null) {
-            val newPage = ScannedPage(
-                sourceUri = tempCameraImageUri!!,
-                filter = ScanFilter.WHITE_GREY,
-                filterIntensity = 1.0f
-            )
-            scannedPages.add(newPage)
-            selectedPageIndex = scannedPages.size - 1
-            isCaptureViewActive = false
+        ).apply {
+            createNewFile()
+            trackedTempFiles.add(this)
         }
     }
 
-    // Camera Permission Launcher
+    // Camera Permission Launcher for in-app CameraX viewfinder
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
-            val uri = createTempImageUri()
-            tempCameraImageUri = uri
-            cameraLauncher.launch(uri)
-        } else {
-            Toast.makeText(context, "Camera permission needed to snap documents", Toast.LENGTH_SHORT).show()
+        hasCameraPermission = granted
+        if (!granted) {
+            Toast.makeText(context, "Camera permission denied — you can still import from Photos", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // Gallery / Photos Multi-Picker Launcher
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) {
+            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+        }
+    }
+
+    // Zero-permission Photo Picker for importing existing document images
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia()
     ) { uris ->
@@ -168,21 +164,6 @@ fun DocumentScannerScreen(
             }
             selectedPageIndex = scannedPages.size - 1
             isCaptureViewActive = false
-        }
-    }
-
-    fun launchCameraCapture() {
-        val hasCamPerm = androidx.core.content.ContextCompat.checkSelfPermission(
-            context,
-            android.Manifest.permission.CAMERA
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-
-        if (hasCamPerm) {
-            val uri = createTempImageUri()
-            tempCameraImageUri = uri
-            cameraLauncher.launch(uri)
-        } else {
-            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
         }
     }
 
@@ -423,190 +404,81 @@ fun DocumentScannerScreen(
             }
 
             if (isCaptureViewActive) {
-                // ==============================================================
-                // VIEW 1: LIVE DOCUMENT VIEWFINDER & SHUTTER DOCK
-                // ==============================================================
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Header Guidance Pill
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface,
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = Brush.horizontalGradient(listOf(AdfElectricCyan.copy(alpha = 0.5f), AdfVibrantBlue.copy(alpha = 0.5f)))
+                CameraXDocumentCaptureView(
+                    hasCameraPermission = hasCameraPermission,
+                    isFlashOn = isFlashOn,
+                    isAutoCaptureEnabled = isAutoCaptureEnabled,
+                    isLiquidTheme = isLiquidTheme,
+                    scannedCount = scannedPages.size,
+                    onRequestPermission = {
+                        cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                    },
+                    onToggleAutoCapture = { isAutoCaptureEnabled = !isAutoCaptureEnabled },
+                    onPickPhotos = {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                         )
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(AdfElectricCyan)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Auto edge detection • Position document in view",
-                                color = AdfTextPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-
-                    // Central Viewfinder Reticle Frame (A4 document shape)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.92f)
-                            .weight(1f)
-                            .padding(vertical = 12.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (isLiquidTheme) Color(0x3B0F172A) else Color(0xFF0F172A))
-                            .border(
-                                width = 2.dp,
-                                brush = Brush.linearGradient(
-                                    listOf(AdfElectricCyan, AdfVibrantBlue, AdfElectricCyan)
-                                ),
-                                shape = RoundedCornerShape(16.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Corner Target Reticle Brackets
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val w = size.width
-                            val h = size.height
-                            val arm = 36f
-                            val stroke = 6f
-                            val col = AdfElectricCyan
-
-                            // Top-Left
-                            drawLine(col, androidx.compose.ui.geometry.Offset(24f, 24f), androidx.compose.ui.geometry.Offset(24f + arm, 24f), stroke)
-                            drawLine(col, androidx.compose.ui.geometry.Offset(24f, 24f), androidx.compose.ui.geometry.Offset(24f, 24f + arm), stroke)
-
-                            // Top-Right
-                            drawLine(col, androidx.compose.ui.geometry.Offset(w - 24f, 24f), androidx.compose.ui.geometry.Offset(w - 24f - arm, 24f), stroke)
-                            drawLine(col, androidx.compose.ui.geometry.Offset(w - 24f, 24f), androidx.compose.ui.geometry.Offset(w - 24f, 24f + arm), stroke)
-
-                            // Bottom-Left
-                            drawLine(col, androidx.compose.ui.geometry.Offset(24f, h - 24f), androidx.compose.ui.geometry.Offset(24f + arm, h - 24f), stroke)
-                            drawLine(col, androidx.compose.ui.geometry.Offset(24f, h - 24f), androidx.compose.ui.geometry.Offset(24f, h - 24f - arm), stroke)
-
-                            // Bottom-Right
-                            drawLine(col, androidx.compose.ui.geometry.Offset(w - 24f, h - 24f), androidx.compose.ui.geometry.Offset(w - 24f - arm, h - 24f), stroke)
-                            drawLine(col, androidx.compose.ui.geometry.Offset(w - 24f, h - 24f), androidx.compose.ui.geometry.Offset(w - 24f, h - 24f - arm), stroke)
-                        }
-
-                        // Guidance Watermark
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(24.dp)
-                        ) {
-                            AdfIcon.Camera(size = 56.dp, primaryColor = AdfElectricCyan, accentColor = AdfCoral)
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Text(
-                                text = "READY TO SCAN",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp),
-                                color = AdfTextPrimary
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Tap the round Shutter button below to capture, or pick existing documents from your device library.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = AdfTextSecondary,
-                                textAlign = TextAlign.Center
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // One-tap sample document buttons (for instant emulator testing)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = { createSampleDocument("contract") },
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AdfElectricCyan),
-                                    modifier = Modifier.testTag("scan_sample_contract_button")
-                                ) {
-                                    Text("Demo Contract", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    },
+                    onReviewPages = { isCaptureViewActive = false },
+                    onDemoContract = { createSampleDocument("contract") },
+                    onDemoInvoice = { createSampleDocument("invoice") },
+                    onImageCaptured = { capturedUri, detectedQuad ->
+                        coroutineScope.launch {
+                            val finalUri = if (detectedQuad != null) {
+                                withContext(Dispatchers.IO) {
+                                    val raw = DocumentScanProcessor.loadBitmapFromUri(context, capturedUri)
+                                    if (raw != null) {
+                                        val warped = DocumentScanProcessor.warpPerspectiveQuad(raw, detectedQuad)
+                                        if (warped !== raw && !raw.isRecycled) raw.recycle()
+                                        val outFile = File(context.cacheDir, "scan_auto_warp_${System.currentTimeMillis()}.jpg")
+                                        FileOutputStream(outFile).use { out ->
+                                            warped.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                                        }
+                                        warped.recycle()
+                                        trackedTempFiles.add(outFile)
+                                        Uri.fromFile(outFile)
+                                    } else capturedUri
                                 }
-                                OutlinedButton(
-                                    onClick = { createSampleDocument("invoice") },
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AdfCoral),
-                                    modifier = Modifier.testTag("scan_sample_invoice_button")
-                                ) {
-                                    Text("Demo Invoice", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            } else {
+                                // Run deterministic edge detection once on still image if none provided
+                                withContext(Dispatchers.Default) {
+                                    val bmp = DocumentScanProcessor.loadBitmapFromUri(context, capturedUri, 1200)
+                                    val q = bmp?.let { b ->
+                                        val r = DocumentEdgeDetector.detectFromBitmap(b).quad
+                                        if (!b.isRecycled) b.recycle()
+                                        r
+                                    }
+                                    if (q != null) {
+                                        val fullRaw = DocumentScanProcessor.loadBitmapFromUri(context, capturedUri)
+                                        if (fullRaw != null) {
+                                            val warped = DocumentScanProcessor.warpPerspectiveQuad(fullRaw, q)
+                                            if (warped !== fullRaw && !fullRaw.isRecycled) fullRaw.recycle()
+                                            val outFile = File(context.cacheDir, "scan_auto_warp_${System.currentTimeMillis()}.jpg")
+                                            FileOutputStream(outFile).use { out ->
+                                                warped.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                                            }
+                                            warped.recycle()
+                                            trackedTempFiles.add(outFile)
+                                            Uri.fromFile(outFile)
+                                        } else capturedUri
+                                    } else capturedUri
                                 }
                             }
-                        }
-                    }
-
-                    // Bottom Shutter & Controls Dock
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        // Import from Photos
-                        IconButton(
-                            onClick = {
-                                photoPickerLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
-                            },
-                            modifier = Modifier
-                                .size(52.dp)
-                                .clip(CircleShape)
-                                .background(if (isLiquidTheme) GlassSurfaceDark else AdfSurfaceCard)
-                                .border(1.dp, AdfBorderSubtle, CircleShape)
-                                .testTag("scanner_pick_photos_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PhotoLibrary,
-                                contentDescription = "Import Photos",
-                                tint = AdfElectricCyan
+                            val newPage = ScannedPage(
+                                sourceUri = finalUri,
+                                filter = ScanFilter.WHITE_GREY,
+                                filterIntensity = 1.0f
                             )
+                            if (detectedQuad != null) {
+                                detectedQuadHints[newPage.id] = detectedQuad
+                            }
+                            scannedPages.add(newPage)
+                            selectedPageIndex = scannedPages.size - 1
+                            isCaptureViewActive = false
                         }
-
-                        // Central Shutter Button with glowing outer ring
-                        Box(
-                            modifier = Modifier
-                                .size(82.dp)
-                                .clip(CircleShape)
-                                .background(AdfElectricCyan.copy(alpha = 0.2f))
-                                .border(2.dp, AdfElectricCyan, CircleShape)
-                                .clickable { launchCameraCapture() }
-                                .testTag("scanner_shutter_button"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White)
-                                    .shadow(elevation = 6.dp, shape = CircleShape)
-                            )
-                        }
-
-                        // Done / Review badge (if any pages already scanned)
-                        if (scannedPages.isNotEmpty()) {
-                            BadgeBox(
-                                count = scannedPages.size,
-                                onClick = { isCaptureViewActive = false }
-                            )
-                        } else {
-                            Spacer(modifier = Modifier.size(52.dp))
-                        }
-                    }
-                }
+                    },
+                    createTempCaptureFile = ::createTempCaptureFile
+                )
             } else {
                 // ==============================================================
                 // VIEW 2: DOCUMENT REVIEW & INTERACTIVE FILTER STUDIO
@@ -743,51 +615,26 @@ fun DocumentScannerScreen(
                                     contentScale = ContentScale.Fit
                                 )
 
-                                // Interactive Crop Boundary Overlay lines + Apply Auto-Trim Button
+                                // Interactive 4-Corner Perspective Crop Editor Overlay
                                 if (isCropOverlayActive) {
-                                    Canvas(modifier = Modifier.fillMaxSize()) {
-                                        val w = size.width
-                                        val h = size.height
-                                        val pad = 24f
-                                        val strokeWidth = 4f
-                                        val lineCol = AdfElectricCyan
-
-                                        // Edge rectangle boundary
-                                        drawRect(
-                                            color = lineCol,
-                                            topLeft = androidx.compose.ui.geometry.Offset(pad, pad),
-                                            size = androidx.compose.ui.geometry.Size(w - (pad * 2), h - (pad * 2)),
-                                            style = androidx.compose.ui.graphics.drawscope.Stroke(
-                                                width = strokeWidth,
-                                                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(12f, 12f))
-                                            )
-                                        )
-
-                                        // Corner Handles
-                                        val handleR = 14f
-                                        val handleColor = AdfCoral
-                                        drawCircle(handleColor, handleR, androidx.compose.ui.geometry.Offset(pad, pad))
-                                        drawCircle(handleColor, handleR, androidx.compose.ui.geometry.Offset(w - pad, pad))
-                                        drawCircle(handleColor, handleR, androidx.compose.ui.geometry.Offset(pad, h - pad))
-                                        drawCircle(handleColor, handleR, androidx.compose.ui.geometry.Offset(w - pad, h - pad))
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            val pageToCrop = activePage ?: return@Button
+                                    val initialHint = activePage?.let { detectedQuadHints[it.id] }
+                                    PerspectiveCropOverlay(
+                                        initialQuad = initialHint,
+                                        onApplyQuadCrop = { quad ->
+                                            val pageToCrop = activePage ?: return@PerspectiveCropOverlay
                                             val idx = selectedPageIndex
-                                            if (idx !in scannedPages.indices) return@Button
+                                            if (idx !in scannedPages.indices) return@PerspectiveCropOverlay
                                             coroutineScope.launch {
                                                 val croppedUri = withContext(Dispatchers.IO) {
                                                     val raw = DocumentScanProcessor.loadBitmapFromUri(context, pageToCrop.sourceUri)
                                                         ?: return@withContext null
-                                                    val trimmed = DocumentScanProcessor.trimPageMargins(raw, 0.06f)
-                                                    if (trimmed !== raw && !raw.isRecycled) raw.recycle()
+                                                    val warped = DocumentScanProcessor.warpPerspectiveQuad(raw, quad)
+                                                    if (warped !== raw && !raw.isRecycled) raw.recycle()
                                                     val outFile = File(context.cacheDir, "scan_crop_${System.currentTimeMillis()}.jpg")
                                                     FileOutputStream(outFile).use { out ->
-                                                        trimmed.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                                                        warped.compress(Bitmap.CompressFormat.JPEG, 92, out)
                                                     }
-                                                    trimmed.recycle()
+                                                    warped.recycle()
                                                     trackedTempFiles.add(outFile)
                                                     Uri.fromFile(outFile)
                                                 }
@@ -799,22 +646,11 @@ fun DocumentScannerScreen(
                                                         id = UUID.randomUUID().toString()
                                                     )
                                                     isCropOverlayActive = false
-                                                    Toast.makeText(context, "Margins trimmed cleanly", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, "Perspective crop applied", Toast.LENGTH_SHORT).show()
                                                 }
                                             }
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = AdfCoral),
-                                        shape = RoundedCornerShape(18.dp),
-                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                                        modifier = Modifier
-                                            .align(Alignment.TopCenter)
-                                            .padding(top = 12.dp)
-                                            .testTag("scanner_apply_crop_button")
-                                    ) {
-                                        Icon(Icons.Default.Crop, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Apply Margin Crop", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                                    }
+                                        }
+                                    )
                                 }
                             }
                         } else {
@@ -1479,10 +1315,14 @@ fun DocumentScannerScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedButton(
                         onClick = {
-                            val shareUri = Uri.parse(doc.uriString)
+                            val pdfFile = File(doc.filePath)
+                            val shareUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdfFile)
                             val intent = Intent(Intent.ACTION_SEND).apply {
                                 type = "application/pdf"
                                 putExtra(Intent.EXTRA_STREAM, shareUri)
+                                putExtra(Intent.EXTRA_SUBJECT, "${doc.title}.pdf")
+                                putExtra(Intent.EXTRA_TITLE, "${doc.title}.pdf")
+                                clipData = ClipData.newUri(context.contentResolver, "${doc.title}.pdf", shareUri)
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
                             context.startActivity(Intent.createChooser(intent, "Share Scanned PDF"))
@@ -1631,6 +1471,8 @@ fun DocumentScannerScreen(
                                         val intent = Intent(Intent.ACTION_SEND).apply {
                                             type = "text/plain"
                                             putExtra(Intent.EXTRA_STREAM, uri)
+                                            putExtra(Intent.EXTRA_SUBJECT, file.name)
+                                            clipData = ClipData.newUri(context.contentResolver, file.name, uri)
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                         }
                                         context.startActivity(Intent.createChooser(intent, "Share OCR Text File"))

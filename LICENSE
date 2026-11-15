@@ -1,57 +1,65 @@
-# ADF AIO Proprietary Software License
+# PDF (AIO) Proprietary Software License
 
-Copyright © 2026 ISHANT KOHLI. All rights reserved.
+**Copyright © 2026 Ishant Kohli. All rights reserved.**
+
+Application: **PDF (AIO)** (`com.aistudio.acrobatreader.hptwqz`, v5.3.0)  
+Copyright Holder: **Ishant Kohli**  
+Contact: **ishantkohlikohli@gmail.com**  
+Website: **https://ishantkohli.github.io/Web**  
+Repository: **https://github.com/Ishantkohli/PDF-AIO**
+
+---
 
 ## 1. Ownership
 
-ADF AIO, including its original source code, interface, design, graphics, branding, and documentation, is owned by or licensed to the copyright holder, except for third-party components governed by their own licenses.
+PDF (AIO), including its original Kotlin/Compose source code, user interface design, custom graphics, branding, architecture, and documentation, is proprietary property owned by **Ishant Kohli**, except for third-party open-source components governed by their respective licenses.
 
-## 2. Use of the Pre-built Application
+## 2. Permitted Use of the Pre-Built Application
 
-You may access and use the official pre-built version of ADF AIO for its intended purpose, subject to the applicable Terms and Conditions.
+Subject to the applicable Terms and Conditions and Acceptable Use Policy, you are granted a limited, personal or internal organizational, non-exclusive, non-transferable, revocable license to install and use the official pre-built **PDF (AIO)** Android application for lawful document management purposes.
 
-This permission does not transfer ownership of the application or grant permission to reuse its proprietary source code.
+This permission does not transfer ownership of the application or grant any license to reuse, redistribute, or build upon its proprietary source code.
 
-## 3. Restrictions on Source Code
+## 3. Source Code and Asset Restrictions
 
-Without prior written permission from the copyright holder, you may not, to the extent permitted by applicable law:
+Except where prior written permission is granted by the copyright holder, or where expressly permitted by mandatory applicable law, you may **not**:
 
-- Copy, redistribute, publish, sell, or sublicense the proprietary source code.
-- Use the proprietary source code to create, develop, or distribute your own application or a derivative application.
-- Modify, reproduce, or commercially exploit the proprietary implementation.
-- Remove copyright notices or claim ownership of ADF AIO or its proprietary materials.
-- Use the ADF AIO name, logo, or branding in a way that implies unauthorized ownership or endorsement.
+- Copy, redistribute, republish, sell, lease, or sublicense the proprietary source code.
+- Use the proprietary source code or substantial portions of it to develop, compile, or distribute a competing or derivative application.
+- Modify, adapt, or commercially exploit the proprietary implementation.
+- Remove or alter copyright notices, authorship credits, or proprietary license notices.
+- Use the **PDF (AIO)** name, **ADF AIO** historical branding, custom icons, or banners in a manner that implies endorsement, sponsorship, or ownership.
 
-Public access to a repository does not grant a general license to reuse its proprietary code.
+Public visibility of this repository is provided for viewing, security inspection, and reference only and does **not** grant an open-source or commercial reuse license.
 
-## 4. Third-Party Components
+## 4. Third-Party Open-Source Components
 
-Third-party libraries, assets, and open-source components remain subject to their respective licenses. This license does not override those licenses or claim ownership of materials the copyright holder does not own.
+PDF (AIO) incorporates third-party libraries and open-source components (including Apache PDFBox-Android, Android Jetpack libraries, CameraX, Room, Coil, and Material Components) under their respective licenses (such as the Apache License, Version 2.0). This Proprietary Software License applies strictly to the original proprietary materials owned by Ishant Kohli and does not restrict or override rights granted under those third-party open-source licenses.
 
-## 5. Legal Exceptions
+## 5. Statutory Rights
 
-Nothing in this license removes rights or exceptions that cannot lawfully be restricted under applicable law.
+Nothing in this license excludes or restricts statutory rights or exceptions (such as fair dealing, interoperability, or consumer protection rights) that cannot lawfully be excluded under applicable law.
 
-## 6. Disclaimer
+## 6. Disclaimer of Warranties
 
-To the maximum extent permitted by law, ADF AIO is provided “AS IS” and “AS AVAILABLE,” without warranties not expressly required by law.
+To the maximum extent permitted by applicable law, **PDF (AIO)** is provided **"AS IS"** and **"AS AVAILABLE"**, without warranties of any kind, whether express, implied, or statutory, including warranties of merchantability, fitness for a particular purpose, accuracy, or non-infringement.
 
 ## 7. Limitation of Liability
 
-To the maximum extent permitted by law, the copyright holder is not liable for indirect or consequential losses arising from the use of the application or its proprietary materials. Liability that cannot legally be excluded remains unaffected.
+To the maximum extent permitted by applicable law, the copyright holder (**Ishant Kohli**) shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or loss of data arising from use or inability to use the application. Liability that cannot lawfully be excluded remains unaffected.
 
 ## 8. Termination
 
-Permission to use the application may be terminated following a material breach of this license, subject to applicable law.
+Your permission to use the application may be terminated if you materially breach this license or the Terms and Conditions. Upon termination, you must cease using any unauthorized copies or proprietary materials.
 
-## 9. Permission Requests
+## 9. Licensing Inquiries & Written Authorization
 
-For source-code permissions, commercial licensing, or other written authorization, contact:
+For commercial licensing, enterprise distribution, or written source-code permission requests, contact:
 
-                                                                        ( ishantkohlikohli@gmail.com )
+- **Developer / Copyright Holder:** Ishant Kohli
+- **Email:** `ishantkohlikohli@gmail.com`
+- **Website:** `https://ishantkohli.github.io/Web`
 
-## 10. All Rights Reserved
+## 10. Reservation of Rights
 
-Except for the limited permission to use the official pre-built application described above, no rights are granted unless expressly authorized in writing.
-
-This license is a template and should be reviewed by a qualified legal professional before publication.
+All rights not expressly granted in this license are reserved by **Ishant Kohli**.

@@ -1,8 +1,11 @@
 package com.example.ui.screens
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -10,13 +13,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -49,27 +51,45 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.AnnotationEntity
+import com.example.data.local.StorageRenameCoordinator
 import com.example.data.pdf.DocumentConverterEngine
+import com.example.data.pdf.PdfRedactionEngine
+import com.example.data.pdf.PdfTextLayoutEngine
+import com.example.data.pdf.ShareCoordinator
 import com.example.ui.AnnotationTool
 import com.example.ui.AppScreen
 import com.example.ui.PdfViewModel
 import com.example.ui.components.DigitalSignatureDialog
+import com.example.ui.components.FormFieldType
+import com.example.ui.components.FormFillOverlay
 import com.example.ui.components.WatermarkCustomizerDialog
+import com.example.ui.screens.reader.BookmarksBottomSheet
+import com.example.ui.screens.reader.ProviderDeniedSaveCopyDialog
+import com.example.ui.screens.reader.RenameDocumentDialog
+import com.example.ui.screens.reader.SelectionFloatingActionBar
+import com.example.ui.screens.reader.ShareOptionsBottomSheet
+import com.example.ui.screens.reader.computeFittedPageRect
+import com.example.ui.screens.reader.pointerToFittedNormalized
 import com.example.ui.theme.*
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,8 +103,11 @@ fun ReaderScreen(viewModel: PdfViewModel) {
     val activeTool by viewModel.activeTool.collectAsStateWithLifecycle()
     val activeColor by viewModel.activeColor.collectAsStateWithLifecycle()
     val activeStrokeWidth by viewModel.activeStrokeWidth.collectAsStateWithLifecycle()
+    val activeOpacity by viewModel.activeOpacity.collectAsStateWithLifecycle()
     val annotations by viewModel.currentAnnotations.collectAsStateWithLifecycle()
     val signatures by viewModel.signatures.collectAsStateWithLifecycle()
+    val currentPageTextLayout by viewModel.currentPageTextLayout.collectAsStateWithLifecycle()
+    val currentBookmarks by viewModel.currentBookmarks.collectAsStateWithLifecycle()
 
     val isLiquidMode by viewModel.isLiquidMode.collectAsStateWithLifecycle()
     val isPureViewerMode by viewModel.isPureViewerMode.collectAsStateWithLifecycle()
@@ -99,6 +122,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val currentSearchMatchIndex by viewModel.currentSearchMatchIndex.collectAsStateWithLifecycle()
     val hapticFeedback = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val clipboardManager = LocalClipboardManager.current
     val density = LocalDensity.current
 
     var isBarsVisible by remember { mutableStateOf(true) }
@@ -122,8 +146,6 @@ fun ReaderScreen(viewModel: PdfViewModel) {
     var isWhiteoutRedact by remember { mutableStateOf(false) }
 
     var editingAnnotation by remember { mutableStateOf<AnnotationEntity?>(null) }
-    var showConvertToImagesDialog by remember { mutableStateOf(false) }
-    var showConvertToWordDialog by remember { mutableStateOf(false) }
 
     var selectedStampText by remember { mutableStateOf("APPROVED") }
     var showSignaturePicker by remember { mutableStateOf(false) }
@@ -131,6 +153,39 @@ fun ReaderScreen(viewModel: PdfViewModel) {
     var selectedSignatureAnnId by remember { mutableStateOf<Long?>(null) }
     val signatureDragOffsets = remember { mutableStateMapOf<Long, Offset>() }
     var showOptionsMenu by remember { mutableStateOf(false) }
+
+    // Clickable Header Title Menu + Real Storage Rename + Save Copy As fallback
+    var showTitleMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var isRenamingFile by remember { mutableStateOf(false) }
+    var renameErrorText by remember { mutableStateOf<String?>(null) }
+    var providerDeniedInfo by remember { mutableStateOf<StorageRenameCoordinator.RenameResult.ProviderDenied?>(null) }
+    val saveCopyLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { destUri ->
+        if (destUri != null) {
+            viewModel.saveRenamedCopyToUri(destUri) { _ ->
+                providerDeniedInfo = null
+            }
+        }
+    }
+
+    // 4-Option Share Sheet & Bookmarks Sheet
+    var showShareSheet by remember { mutableStateOf(false) }
+    var isPreparingShare by remember { mutableStateOf(false) }
+    var showBookmarksSheet by remember { mutableStateOf(false) }
+
+    // Permanent Redaction Sanitization States
+    val redactCount = remember(annotations) { annotations.count { it.type == "REDACT" } }
+    var showApplyRedactionDialog by remember { mutableStateOf(false) }
+    var isApplyingRedaction by remember { mutableStateOf(false) }
+    var redactionResultInfo by remember { mutableStateOf<PdfRedactionEngine.RedactionResult?>(null) }
+
+    // Text Selection State (normalized glyph indices inside currentPageTextLayout)
+    var selectionRange by remember(currentDoc?.id, currentPage) { mutableStateOf<IntRange?>(null) }
+    var selectionAnchorIdx by remember(currentDoc?.id, currentPage) { mutableIntStateOf(0) }
+    var selectionExpandStage by remember(currentDoc?.id, currentPage) { mutableIntStateOf(0) }
+    var selectionUnavailableNotice by remember(currentDoc?.id, currentPage) { mutableStateOf<String?>(null) }
 
     val activeThemeStyle by ThemeManager.currentTheme.collectAsStateWithLifecycle()
     val themeColorScheme = ThemeManager.getColorScheme(activeThemeStyle)
@@ -154,7 +209,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
     var showDeletePageDialog by remember { mutableStateOf(false) }
     var isDeletingPage by remember { mutableStateOf(false) }
 
-    // Live drawing stroke buffer for active pen/highlighter
+    // Live drawing stroke buffer for active pen/highlighter/underline/strike
     val currentDrawingPoints = remember { mutableStateListOf<Offset>() }
     var pageSizePx by remember { mutableStateOf(IntSize(1, 1)) }
 
@@ -170,10 +225,20 @@ fun ReaderScreen(viewModel: PdfViewModel) {
 
     // Back button handling
     BackHandler {
-        if (activeTool != AnnotationTool.NONE) {
-            viewModel.setActiveTool(AnnotationTool.NONE)
-        } else {
-            viewModel.navigateTo(AppScreen.HOME)
+        when {
+            selectionRange != null -> selectionRange = null
+            activeTool != AnnotationTool.NONE -> viewModel.setActiveTool(AnnotationTool.NONE)
+            else -> viewModel.navigateTo(AppScreen.HOME)
+        }
+    }
+
+    LaunchedEffect(activeTool, currentPage) {
+        if (activeTool == AnnotationTool.TEXT_SELECT) {
+            viewModel.loadPageTextLayout(currentPage)
+        }
+        if (activeTool != AnnotationTool.NONE && activeTool != AnnotationTool.TEXT_SELECT) {
+            selectionRange = null
+            selectionUnavailableNotice = null
         }
     }
 
@@ -184,7 +249,10 @@ fun ReaderScreen(viewModel: PdfViewModel) {
         offsetY = 0f
         selectedSignatureAnnId = null
         signatureDragOffsets.clear()
+        selectionRange = null
+        selectionUnavailableNotice = null
         viewModel.renderPage(currentPage)
+        viewModel.loadPageTextLayout(currentPage)
         if (currentPage + 1 < totalPages) viewModel.renderPage(currentPage + 1)
         if (currentPage - 1 >= 0) viewModel.renderPage(currentPage - 1)
     }
@@ -222,43 +290,86 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                 Column {
                     TopAppBar(
                         title = {
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = currentDoc?.title ?: "Document",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = AcrobatTextPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false)
-                                    )
-                                    if (isPureViewerMode) {
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color = Color(0xFF10B981).copy(alpha = 0.18f)
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            Box {
+                                Column(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { showTitleMenu = true }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                        .testTag("reader_header_title_button")
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = currentDoc?.title ?: "Document",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = AcrobatTextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowDropDown,
+                                            contentDescription = "Document Filename Actions",
+                                            tint = AcrobatTextSecondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        if (isPureViewerMode) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(4.dp),
+                                                color = Color(0xFF10B981).copy(alpha = 0.18f)
                                             ) {
-                                                com.example.ui.components.AdfIcon.PureViewer(size = 11.dp, primaryColor = Color(0xFF10B981))
-                                                Spacer(modifier = Modifier.width(3.dp))
-                                                Text(
-                                                    text = "PURE VIEWER",
-                                                    color = Color(0xFF10B981),
-                                                    fontSize = 8.sp,
-                                                    fontWeight = FontWeight.ExtraBold
-                                                )
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                ) {
+                                                    com.example.ui.components.AdfIcon.PureViewer(size = 11.dp, primaryColor = Color(0xFF10B981))
+                                                    Spacer(modifier = Modifier.width(3.dp))
+                                                    Text(
+                                                        text = "PURE",
+                                                        color = Color(0xFF10B981),
+                                                        fontSize = 8.sp,
+                                                        fontWeight = FontWeight.ExtraBold
+                                                    )
+                                                }
                                             }
                                         }
                                     }
+                                    Text(
+                                        text = "Page ${currentPage + 1} of $totalPages",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = AcrobatTextSecondary
+                                    )
                                 }
-                                Text(
-                                    text = "Page ${currentPage + 1} of $totalPages",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AcrobatTextSecondary
-                                )
+
+                                DropdownMenu(
+                                    expanded = showTitleMenu,
+                                    onDismissRequest = { showTitleMenu = false },
+                                    modifier = Modifier.background(AcrobatDarkSurfaceElevated)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Rename File", color = AcrobatTextPrimary, fontWeight = FontWeight.Medium) },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.DriveFileRenameOutline, contentDescription = null, tint = AdfElectricCyan)
+                                        },
+                                        modifier = Modifier.testTag("menu_rename_file"),
+                                        onClick = {
+                                            showTitleMenu = false
+                                            renameErrorText = null
+                                            showRenameDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Close", color = AcrobatTextSecondary) },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.Close, contentDescription = null, tint = AcrobatTextSecondary)
+                                        },
+                                        modifier = Modifier.testTag("menu_close_rename"),
+                                        onClick = {
+                                            showTitleMenu = false
+                                        }
+                                    )
+                                }
                             }
                         },
                         navigationIcon = {
@@ -283,27 +394,15 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                 )
                             }
 
-                            // Continuous Scroll vs Single Page Toggle
+                            // 4-Option Share Sheet Button
                             IconButton(
-                                onClick = { viewModel.toggleContinuousScroll() },
-                                modifier = Modifier.testTag("reader_scroll_mode_toggle")
+                                onClick = { showShareSheet = true },
+                                modifier = Modifier.testTag("reader_share_button")
                             ) {
                                 Icon(
-                                    imageVector = if (isContinuousScroll) Icons.Default.ViewAgenda else Icons.Default.ViewDay,
-                                    contentDescription = "Scroll Mode",
-                                    tint = if (isContinuousScroll) CrimsonAccent else AcrobatTextSecondary
-                                )
-                            }
-
-                            // Page Manager (Reorder, Rotate, Delete)
-                            IconButton(
-                                onClick = { viewModel.navigateTo(AppScreen.PAGE_MANAGER) },
-                                modifier = Modifier.testTag("page_manager_top_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Layers,
-                                    contentDescription = "Manage Pages",
-                                    tint = AcrobatTextSecondary
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "Share Document",
+                                    tint = AdfElectricCyan
                                 )
                             }
 
@@ -332,7 +431,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                 )
                             }
 
-                            // More Options Overflow Menu (Light/Night theme, Liquid Mode, Read Aloud, Thumbnails, Share)
+                            // More Options Overflow Menu
                             Box {
                                 IconButton(
                                     onClick = { showOptionsMenu = true },
@@ -370,6 +469,42 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                         onClick = {
                                             showOptionsMenu = false
                                             viewModel.cycleColorFilter()
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = if (isContinuousScroll) "Single Page Mode" else "Continuous Scroll",
+                                                color = AcrobatTextPrimary
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = if (isContinuousScroll) Icons.Default.ViewDay else Icons.Default.ViewAgenda,
+                                                contentDescription = null,
+                                                tint = AcrobatTextSecondary
+                                            )
+                                        },
+                                        onClick = {
+                                            showOptionsMenu = false
+                                            viewModel.toggleContinuousScroll()
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Organize Pages", color = AcrobatTextPrimary) },
+                                        leadingIcon = { Icon(Icons.Default.Layers, contentDescription = null, tint = AcrobatTextSecondary) },
+                                        onClick = {
+                                            showOptionsMenu = false
+                                            viewModel.navigateTo(AppScreen.PAGE_MANAGER)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Bookmarks (${currentBookmarks.size})", color = AcrobatTextPrimary) },
+                                        leadingIcon = { Icon(Icons.Default.Bookmarks, contentDescription = null, tint = Color(0xFFF59E0B)) },
+                                        modifier = Modifier.testTag("reader_bookmarks_button"),
+                                        onClick = {
+                                            showOptionsMenu = false
+                                            showBookmarksSheet = true
                                         }
                                     )
                                     DropdownMenuItem(
@@ -440,46 +575,24 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                         }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Convert to Word (.docx)", color = AcrobatTextPrimary) },
-                                        leadingIcon = { Icon(Icons.Default.Article, contentDescription = null, tint = Color(0xFF10B981)) },
+                                        text = { Text("Share / Export (PDF, TXT, DOCX)...", color = AcrobatTextPrimary, fontWeight = FontWeight.SemiBold) },
+                                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = AdfElectricCyan) },
                                         onClick = {
                                             showOptionsMenu = false
-                                            val doc = currentDoc ?: return@DropdownMenuItem
-                                            viewModel.convertPdfToWord(doc) { wordFile ->
-                                                if (wordFile != null) {
-                                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", wordFile)
-                                                    val intent = Intent(Intent.ACTION_SEND).apply {
-                                                        type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                    }
-                                                    context.startActivity(Intent.createChooser(intent, "Share Word Document"))
-                                                }
-                                            }
+                                            showShareSheet = true
                                         }
                                     )
-                                    DropdownMenuItem(
-                                        text = { Text("Export & Share PDF", color = AcrobatTextPrimary) },
-                                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = AcrobatTextSecondary) },
-                                        onClick = {
-                                            showOptionsMenu = false
-                                            viewModel.exportAnnotatedDocument { exportedFile ->
-                                                if (exportedFile != null) {
-                                                    val uri = FileProvider.getUriForFile(
-                                                        context,
-                                                        "${context.packageName}.fileprovider",
-                                                        exportedFile
-                                                    )
-                                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                        type = "application/pdf"
-                                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                    }
-                                                    context.startActivity(Intent.createChooser(shareIntent, "Share Document"))
-                                                }
+                                    if (redactCount > 0) {
+                                        DropdownMenuItem(
+                                            text = { Text("Apply Permanent Redaction ($redactCount)", color = Color(0xFFF43F5E), fontWeight = FontWeight.Bold) },
+                                            leadingIcon = { Icon(Icons.Default.Security, contentDescription = null, tint = Color(0xFFF43F5E)) },
+                                            modifier = Modifier.testTag("menu_apply_redaction"),
+                                            onClick = {
+                                                showOptionsMenu = false
+                                                showApplyRedactionDialog = true
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
                             }
                         },
@@ -781,7 +894,36 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                 val bitmap = pageBitmaps[currentPage]
 
                 if (bitmap != null) {
-                    // Interactive Container for PDF page + Vector annotations
+                    val fittedRect = remember(pageSizePx, bitmap.width, bitmap.height) {
+                        computeFittedPageRect(pageSizePx, bitmap.width, bitmap.height)
+                    }
+
+                    // Helper closure to begin or update word/char text selection at pointer offset
+                    val startWordSelectionAt: (Offset) -> Unit = { ptrOffset ->
+                        val norm = pointerToFittedNormalized(ptrOffset, fittedRect)
+                        val layout = currentPageTextLayout
+                        if (layout == null) {
+                            viewModel.loadPageTextLayout(currentPage)
+                            selectionUnavailableNotice = "Inspecting PDF text layer..."
+                        } else if (!layout.isSelectable) {
+                            selectionRange = null
+                            selectionUnavailableNotice = layout.unavailableReason
+                                ?: "Scanned or image-only page: no embedded text layer available."
+                            viewModel.postStatusMessage(selectionUnavailableNotice!!)
+                        } else {
+                            selectionUnavailableNotice = null
+                            val glyphIdx = PdfTextLayoutEngine.findNearestGlyphIndex(layout, norm.x, norm.y)
+                            if (glyphIdx != null) {
+                                val wordRange = PdfTextLayoutEngine.expandToWord(layout, glyphIdx)
+                                selectionAnchorIdx = wordRange.first
+                                selectionRange = wordRange
+                                selectionExpandStage = 0
+                                hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            }
+                        }
+                    }
+
+                    // Interactive Container for PDF page + Text Selection + Vector annotations
                     Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -793,7 +935,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             translationY = offsetY
                         )
                         // Gestures: When tools are NONE, pinch zoom & pan or horizontal slide between pages
-                        .pointerInput(activeTool) {
+                        .pointerInput(activeTool, pageSizePx) {
                             if (activeTool == AnnotationTool.NONE) {
                                 detectTransformGestures { _, pan, zoom, _ ->
                                     val newScale = (scale * zoom).coerceIn(1f, 6f)
@@ -807,7 +949,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                         scale = 1f
                                         offsetX = 0f
                                         offsetY = 0f
-                                        if (kotlin.math.abs(pan.x) > 10f) {
+                                        if (kotlin.math.abs(pan.x) > 10f && selectionRange == null) {
                                             pageSlideOffset += pan.x
                                             if (pageSlideOffset < -70f && currentPage < totalPages - 1) {
                                                 viewModel.setCurrentPage(currentPage + 1)
@@ -823,8 +965,8 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                 }
                             }
                         }
-                        // Tap & Double-Tap listener for Smart Zoom, immersion toggle, notes, stamps, signatures, text box
-                        .pointerInput(activeTool, selectedStampText, selectedSignatureJson) {
+                        // Tap, Double-Tap & Direct Long-Press text selection
+                        .pointerInput(activeTool, selectedStampText, selectedSignatureJson, fittedRect, currentPageTextLayout) {
                             detectTapGestures(
                                 onDoubleTap = { tapOffset ->
                                     if (activeTool == AnnotationTool.NONE) {
@@ -840,17 +982,29 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                         hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                     }
                                 },
+                                onLongPress = { longPressOffset ->
+                                    if (activeTool == AnnotationTool.NONE || activeTool == AnnotationTool.TEXT_SELECT) {
+                                        startWordSelectionAt(longPressOffset)
+                                    }
+                                },
                                 onTap = { offset ->
-                                    val normX = (offset.x / pageSizePx.width).coerceIn(0f, 1f)
-                                    val normY = (offset.y / pageSizePx.height).coerceIn(0f, 1f)
+                                    val norm = pointerToFittedNormalized(offset, fittedRect)
+                                    val normX = norm.x
+                                    val normY = norm.y
 
                                     when (activeTool) {
                                         AnnotationTool.NONE -> {
-                                            if (selectedSignatureAnnId != null) {
-                                                selectedSignatureAnnId = null
-                                            } else {
-                                                isBarsVisible = !isBarsVisible
+                                            when {
+                                                selectionRange != null -> {
+                                                    selectionRange = null
+                                                    selectionUnavailableNotice = null
+                                                }
+                                                selectedSignatureAnnId != null -> selectedSignatureAnnId = null
+                                                else -> isBarsVisible = !isBarsVisible
                                             }
+                                        }
+                                        AnnotationTool.TEXT_SELECT -> {
+                                            startWordSelectionAt(offset)
                                         }
                                         AnnotationTool.STICKY_NOTE -> {
                                             pendingNotePosition = Offset(normX, normY)
@@ -867,6 +1021,14 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                         AnnotationTool.WHITEOUT -> {
                                             pendingWhiteoutPosition = Offset(normX, normY)
                                             whiteoutReplacementText = ""
+                                            isWhiteoutRedact = false
+                                            showWhiteoutDialog = true
+                                            hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        }
+                                        AnnotationTool.REDACT -> {
+                                            pendingWhiteoutPosition = Offset(normX, normY)
+                                            whiteoutReplacementText = ""
+                                            isWhiteoutRedact = true
                                             showWhiteoutDialog = true
                                             hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                                         }
@@ -935,40 +1097,84 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                 }
                             )
                         }
-                        // Drag listener for Pen & Highlighter freehand drawing
-                        .pointerInput(activeTool, activeColor, activeStrokeWidth) {
-                            if (activeTool == AnnotationTool.PEN || activeTool == AnnotationTool.HIGHLIGHT) {
+                        // Drag listener for Pen, Highlighter, Underline, Strikethrough, and Text Selection sweep
+                        .pointerInput(activeTool, activeColor, activeStrokeWidth, activeOpacity, fittedRect, currentPageTextLayout) {
+                            if (activeTool == AnnotationTool.PEN ||
+                                activeTool == AnnotationTool.HIGHLIGHT ||
+                                activeTool == AnnotationTool.UNDERLINE ||
+                                activeTool == AnnotationTool.STRIKETHROUGH
+                            ) {
                                 detectDragGestures(
                                     onDragStart = { startOffset ->
                                         currentDrawingPoints.clear()
                                         currentDrawingPoints.add(startOffset)
                                     },
-                                    onDrag = { change, dragAmount ->
+                                    onDrag = { change, _ ->
                                         change.consume()
                                         currentDrawingPoints.add(change.position)
                                     },
                                     onDragEnd = {
                                         if (currentDrawingPoints.isNotEmpty()) {
-                                            // Convert to JSON array of normalized points
                                             val arr = JSONArray()
                                             for (pt in currentDrawingPoints) {
+                                                val norm = pointerToFittedNormalized(pt, fittedRect)
                                                 val obj = JSONObject()
-                                                obj.put("x", (pt.x / pageSizePx.width).coerceIn(0f, 1f))
-                                                obj.put("y", (pt.y / pageSizePx.height).coerceIn(0f, 1f))
+                                                obj.put("x", norm.x.toDouble())
+                                                obj.put("y", norm.y.toDouble())
                                                 arr.put(obj)
+                                            }
+                                            val annType = when (activeTool) {
+                                                AnnotationTool.HIGHLIGHT -> "HIGHLIGHT"
+                                                AnnotationTool.UNDERLINE -> "UNDERLINE"
+                                                AnnotationTool.STRIKETHROUGH -> "STRIKETHROUGH"
+                                                else -> "PEN"
                                             }
                                             viewModel.addAnnotation(
                                                 pageIndex = currentPage,
-                                                type = if (activeTool == AnnotationTool.HIGHLIGHT) "HIGHLIGHT" else "PEN",
+                                                type = annType,
                                                 pointsJson = arr.toString(),
                                                 colorHex = activeColor,
-                                                strokeWidth = activeStrokeWidth
+                                                strokeWidth = activeStrokeWidth,
+                                                opacity = activeOpacity
                                             )
                                             currentDrawingPoints.clear()
                                         }
                                     },
                                     onDragCancel = {
                                         currentDrawingPoints.clear()
+                                    }
+                                )
+                            } else if (activeTool == AnnotationTool.TEXT_SELECT) {
+                                detectDragGestures(
+                                    onDragStart = { startOffset ->
+                                        val layout = currentPageTextLayout
+                                        if (layout == null) {
+                                            viewModel.loadPageTextLayout(currentPage)
+                                        } else if (!layout.isSelectable) {
+                                            selectionUnavailableNotice = layout.unavailableReason
+                                                ?: "Scanned or image-only page: no embedded text layer available."
+                                        } else {
+                                            selectionUnavailableNotice = null
+                                            val norm = pointerToFittedNormalized(startOffset, fittedRect)
+                                            val idx = PdfTextLayoutEngine.findNearestGlyphIndex(layout, norm.x, norm.y)
+                                            if (idx != null) {
+                                                selectionAnchorIdx = idx
+                                                selectionRange = idx..idx
+                                                selectionExpandStage = 0
+                                            }
+                                        }
+                                    },
+                                    onDrag = { change, _ ->
+                                        change.consume()
+                                        val layout = currentPageTextLayout ?: return@detectDragGestures
+                                        if (!layout.isSelectable) return@detectDragGestures
+                                        val norm = pointerToFittedNormalized(change.position, fittedRect)
+                                        val idx = PdfTextLayoutEngine.findNearestGlyphIndex(layout, norm.x, norm.y)
+                                        if (idx != null) {
+                                            val a = min(selectionAnchorIdx, idx)
+                                            val b = max(selectionAnchorIdx, idx)
+                                            selectionRange = a..b
+                                        }
                                     }
                                 )
                             }
@@ -995,15 +1201,51 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             )
                     )
 
-                    // Canvas Vector Overlay for Saved Annotations + Live Stroke
+                    // Canvas Vector Overlay for Saved Annotations, Text Selection Highlight + Live Stroke
                     Canvas(modifier = Modifier.fillMaxSize()) {
-                        val canvasW = size.width
-                        val canvasH = size.height
+                        val originX = fittedRect.left
+                        val originY = fittedRect.top
+                        val pageW = fittedRect.width.coerceAtLeast(1f)
+                        val pageH = fittedRect.height.coerceAtLeast(1f)
 
-                        // 1. Draw saved annotations for this page
+                        // 0. Draw Native Text Selection Highlight Rectangles + Caret Bars
+                        val layoutForHighlight = currentPageTextLayout
+                        val activeSelRange = selectionRange
+                        if (layoutForHighlight != null && layoutForHighlight.isSelectable && activeSelRange != null) {
+                            val selRects = PdfTextLayoutEngine.getSelectionHighlightRects(layoutForHighlight, activeSelRange)
+                            for (r in selRects) {
+                                val rLeft = originX + r.left * pageW
+                                val rTop = originY + r.top * pageH
+                                val rW = ((r.right - r.left) * pageW).coerceAtLeast(4f)
+                                val rH = ((r.bottom - r.top) * pageH).coerceAtLeast(10f)
+                                drawRect(
+                                    color = Color(0x5538BDF8),
+                                    topLeft = Offset(rLeft, rTop),
+                                    size = androidx.compose.ui.geometry.Size(rW, rH)
+                                )
+                            }
+                            if (selRects.isNotEmpty()) {
+                                val firstR = selRects.first()
+                                val lastR = selRects.last()
+                                val startX = originX + firstR.left * pageW
+                                val startTop = originY + firstR.top * pageH
+                                val startBot = originY + firstR.bottom * pageH
+                                val endX = originX + lastR.right * pageW
+                                val endTop = originY + lastR.top * pageH
+                                val endBot = originY + lastR.bottom * pageH
+
+                                drawLine(Color(0xFF0EA5E9), Offset(startX, startTop), Offset(startX, startBot), strokeWidth = 4f)
+                                drawCircle(Color(0xFF0EA5E9), radius = 11f, center = Offset(startX, startBot + 10f))
+                                drawLine(Color(0xFF0EA5E9), Offset(endX, endTop), Offset(endX, endBot), strokeWidth = 4f)
+                                drawCircle(Color(0xFF0EA5E9), radius = 11f, center = Offset(endX, endBot + 10f))
+                            }
+                        }
+
+                        // 1. Draw saved annotations for this page using exact fittedRect mapping
                         for (ann in pageAnnotations) {
+                            val annAlpha = ann.opacity.coerceIn(0.15f, 1f)
                             when (ann.type) {
-                                "PEN", "HIGHLIGHT" -> {
+                                "PEN", "HIGHLIGHT", "UNDERLINE", "STRIKETHROUGH" -> {
                                     if (ann.pointsJson.isNotBlank()) {
                                         try {
                                             val pts = JSONArray(ann.pointsJson)
@@ -1011,11 +1253,11 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                                 val p = Path()
                                                 for (i in 0 until pts.length()) {
                                                     val obj = pts.getJSONObject(i)
-                                                    val x = obj.getDouble("x").toFloat() * canvasW
-                                                    val y = obj.getDouble("y").toFloat() * canvasH
+                                                    val x = originX + obj.getDouble("x").toFloat() * pageW
+                                                    val y = originY + obj.getDouble("y").toFloat() * pageH
                                                     if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
                                                 }
-                                                val strokeAlpha = if (ann.type == "HIGHLIGHT") 0.45f else 1.0f
+                                                val strokeAlpha = if (ann.type == "HIGHLIGHT") minOf(annAlpha, 0.45f) else annAlpha
                                                 drawPath(
                                                     path = p,
                                                     color = Color(ann.colorHex).copy(alpha = strokeAlpha),
@@ -1027,11 +1269,21 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                                 )
                                             }
                                         } catch (ignored: Exception) {}
+                                    } else if ((ann.type == "UNDERLINE" || ann.type == "STRIKETHROUGH") && ann.width > 0f) {
+                                        val x1 = originX + ann.posX * pageW
+                                        val x2 = originX + (ann.posX + ann.width) * pageW
+                                        val y = originY + ann.posY * pageH
+                                        drawLine(
+                                            color = Color(ann.colorHex).copy(alpha = annAlpha),
+                                            start = Offset(x1, y),
+                                            end = Offset(x2, y),
+                                            strokeWidth = ann.strokeWidth.coerceAtLeast(2.5f)
+                                        )
                                     }
                                 }
                                 "STICKY_NOTE" -> {
-                                    val x = ann.posX * canvasW
-                                    val y = ann.posY * canvasH
+                                    val x = originX + ann.posX * pageW
+                                    val y = originY + ann.posY * pageH
                                     drawCircle(
                                         color = Color(0xFFF59E0B),
                                         radius = 14f,
@@ -1039,10 +1291,10 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                     )
                                 }
                                 "STAMP" -> {
-                                    val x = ann.posX * canvasW
-                                    val y = ann.posY * canvasH
+                                    val x = originX + ann.posX * pageW
+                                    val y = originY + ann.posY * pageH
                                     drawRoundRect(
-                                        color = Color(ann.colorHex),
+                                        color = Color(ann.colorHex).copy(alpha = annAlpha),
                                         topLeft = Offset(x - 55f, y - 18f),
                                         size = androidx.compose.ui.geometry.Size(110f, 36f),
                                         cornerRadius = androidx.compose.ui.geometry.CornerRadius(6f, 6f),
@@ -1052,8 +1304,8 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                 "SIGNATURE", "TYPED_SIGNATURE" -> {
                                     val liveDrag = signatureDragOffsets[ann.id] ?: Offset.Zero
                                     if (ann.textContent.isNotBlank()) {
-                                        val x = (ann.posX + liveDrag.x) * canvasW
-                                        val y = (ann.posY + liveDrag.y) * canvasH
+                                        val x = originX + (ann.posX + liveDrag.x) * pageW
+                                        val y = originY + (ann.posY + liveDrag.y) * pageH
                                         drawContext.canvas.nativeCanvas.apply {
                                             val sigPaint = android.graphics.Paint().apply {
                                                 color = ann.colorHex.toInt()
@@ -1077,10 +1329,10 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                             drawPath(flourishPath, flourishPaint)
                                         }
                                     } else if (ann.pointsJson.isNotBlank()) {
-                                        val sigW = (if (ann.width > 0.05f) ann.width else 0.30f) * canvasW
-                                        val sigH = (if (ann.height > 0.03f) ann.height else 0.12f) * canvasH
-                                        val baseX = (ann.posX + liveDrag.x) * canvasW
-                                        val baseY = (ann.posY + liveDrag.y) * canvasH
+                                        val sigW = (if (ann.width > 0.05f) ann.width else 0.30f) * pageW
+                                        val sigH = (if (ann.height > 0.03f) ann.height else 0.12f) * pageH
+                                        val baseX = originX + (ann.posX + liveDrag.x) * pageW
+                                        val baseY = originY + (ann.posY + liveDrag.y) * pageH
                                         try {
                                             val strokes = JSONArray(ann.pointsJson)
                                             for (s in 0 until strokes.length()) {
@@ -1106,10 +1358,10 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                     }
                                 }
                                 "WHITEOUT", "REDACT" -> {
-                                    val x = ann.posX * canvasW
-                                    val y = ann.posY * canvasH
-                                    val w = (if (ann.width > 0f) ann.width else 0.25f) * canvasW
-                                    val h = (if (ann.height > 0f) ann.height else 0.04f) * canvasH
+                                    val x = originX + ann.posX * pageW
+                                    val y = originY + ann.posY * pageH
+                                    val w = (if (ann.width > 0f) ann.width else 0.25f) * pageW
+                                    val h = (if (ann.height > 0f) ann.height else 0.04f) * pageH
                                     drawRect(
                                         color = if (ann.type == "REDACT") Color.Black else Color.White,
                                         topLeft = Offset(x, y),
@@ -1121,38 +1373,75 @@ fun ReaderScreen(viewModel: PdfViewModel) {
 
                         // 2. Render Live Watermark if configured
                         val wm = activeWatermark
-                        if (wm != null && (wm.applyToAllPages || currentPage == 0) && wm.text.isNotBlank()) {
-                            rotate(-wm.rotationAngle, Offset(canvasW / 2f, canvasH / 2f)) {
-                                val wmPaint = android.graphics.Paint().apply {
-                                    color = wm.colorHex.toInt()
-                                    alpha = (wm.opacity * 255).toInt().coerceIn(10, 240)
-                                    textSize = wm.fontSizeSp * 2.2f
-                                    isFakeBoldText = true
-                                    isAntiAlias = true
-                                    textAlign = android.graphics.Paint.Align.CENTER
-                                }
-                                if (wm.isTiledPattern) {
-                                    val stepX = (canvasW * 0.45f).coerceAtLeast(140f)
-                                    val stepY = (canvasH * 0.22f).coerceAtLeast(100f)
-                                    for (wx in (-canvasW).toInt()..(canvasW * 2).toInt() step stepX.toInt()) {
-                                        for (wy in (-canvasH).toInt()..(canvasH * 2).toInt() step stepY.toInt()) {
-                                            drawContext.canvas.nativeCanvas.drawText(
-                                                wm.text,
-                                                wx.toFloat(),
-                                                wy.toFloat(),
-                                                wmPaint
-                                            )
-                                        }
+                        if (wm != null && (wm.applyToAllPages || currentPage == 0) && (wm.text.isNotBlank() || !wm.imagePath.isNullOrBlank())) {
+                            val wmLogoBmp = wm.imagePath?.let { p ->
+                                val f = java.io.File(p)
+                                if (f.exists() && f.length() > 0L) android.graphics.BitmapFactory.decodeFile(f.absolutePath) else null
+                            }
+                            rotate(-wm.rotationAngle, Offset(originX + pageW / 2f, originY + pageH / 2f)) {
+                                if (wmLogoBmp != null) {
+                                    val logoPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG).apply {
+                                        alpha = (wm.opacity * 255).toInt().coerceIn(15, 250)
                                     }
-                                } else {
-                                    drawContext.canvas.nativeCanvas.drawText(
-                                        wm.text,
-                                        canvasW / 2f,
-                                        canvasH / 2f,
-                                        wmPaint
-                                    )
+                                    val span = minOf(pageW, pageH) * wm.imageScale.coerceIn(0.12f, 0.85f)
+                                    val ratio = wmLogoBmp.height.toFloat() / wmLogoBmp.width.coerceAtLeast(1)
+                                    val drawW = span
+                                    val drawH = span * ratio
+                                    if (wm.isTiledPattern) {
+                                        val stepX = (drawW * 1.6f).coerceAtLeast(140f)
+                                        val stepY = (drawH * 1.8f).coerceAtLeast(140f)
+                                        for (wx in (-pageW).toInt()..(pageW * 2).toInt() step stepX.toInt()) {
+                                            for (wy in (-pageH).toInt()..(pageH * 2).toInt() step stepY.toInt()) {
+                                                val dst = android.graphics.RectF(
+                                                    originX + wx - drawW / 2f,
+                                                    originY + wy - drawH / 2f,
+                                                    originX + wx + drawW / 2f,
+                                                    originY + wy + drawH / 2f
+                                                )
+                                                drawContext.canvas.nativeCanvas.drawBitmap(wmLogoBmp, null, dst, logoPaint)
+                                            }
+                                        }
+                                    } else {
+                                        val cx = originX + pageW / 2f
+                                        val cy = originY + if (wm.text.isNotBlank()) pageH * 0.44f else pageH / 2f
+                                        val dst = android.graphics.RectF(cx - drawW / 2f, cy - drawH / 2f, cx + drawW / 2f, cy + drawH / 2f)
+                                        drawContext.canvas.nativeCanvas.drawBitmap(wmLogoBmp, null, dst, logoPaint)
+                                    }
+                                }
+                                if (wm.text.isNotBlank()) {
+                                    val wmPaint = android.graphics.Paint().apply {
+                                        color = wm.colorHex.toInt()
+                                        alpha = (wm.opacity * 255).toInt().coerceIn(10, 240)
+                                        textSize = wm.fontSizeSp * 2.2f
+                                        isFakeBoldText = true
+                                        isAntiAlias = true
+                                        textAlign = android.graphics.Paint.Align.CENTER
+                                    }
+                                    if (wm.isTiledPattern) {
+                                        val stepX = (pageW * 0.45f).coerceAtLeast(140f)
+                                        val stepY = (pageH * 0.22f).coerceAtLeast(100f)
+                                        for (wx in (-pageW).toInt()..(pageW * 2).toInt() step stepX.toInt()) {
+                                            for (wy in (-pageH).toInt()..(pageH * 2).toInt() step stepY.toInt()) {
+                                                drawContext.canvas.nativeCanvas.drawText(
+                                                    wm.text,
+                                                    originX + wx.toFloat(),
+                                                    originY + wy.toFloat(),
+                                                    wmPaint
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        val textY = if (wmLogoBmp != null) originY + pageH * 0.62f else originY + pageH / 2f
+                                        drawContext.canvas.nativeCanvas.drawText(
+                                            wm.text,
+                                            originX + pageW / 2f,
+                                            textY,
+                                            wmPaint
+                                        )
+                                    }
                                 }
                             }
+                            wmLogoBmp?.recycle()
                         }
 
                         // 3. Draw live stroke in progress
@@ -1161,7 +1450,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             currentDrawingPoints.forEachIndexed { idx, pt ->
                                 if (idx == 0) livePath.moveTo(pt.x, pt.y) else livePath.lineTo(pt.x, pt.y)
                             }
-                            val liveAlpha = if (activeTool == AnnotationTool.HIGHLIGHT) 0.45f else 1f
+                            val liveAlpha = if (activeTool == AnnotationTool.HIGHLIGHT) minOf(activeOpacity, 0.45f) else activeOpacity
                             drawPath(
                                 path = livePath,
                                 color = Color(activeColor).copy(alpha = liveAlpha),
@@ -1174,13 +1463,91 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                         }
                     }
 
-                    // Render interactive overlays for Sticky Notes & Stamps so user can read them
+                    // Draggable Start / End Teardrop Selection Handle Hit Targets (always win over background gestures)
+                    val layoutForHandles = currentPageTextLayout
+                    val currentRange = selectionRange
+                    if (layoutForHandles != null && layoutForHandles.isSelectable && currentRange != null) {
+                        val handleRects = remember(layoutForHandles, currentRange) {
+                            PdfTextLayoutEngine.getSelectionHighlightRects(layoutForHandles, currentRange)
+                        }
+                        if (handleRects.isNotEmpty()) {
+                            val firstRect = handleRects.first()
+                            val lastRect = handleRects.last()
+                            val startHandleX = fittedRect.left + firstRect.left * fittedRect.width
+                            val startHandleY = fittedRect.top + firstRect.bottom * fittedRect.height
+                            val endHandleX = fittedRect.left + lastRect.right * fittedRect.width
+                            val endHandleY = fittedRect.top + lastRect.bottom * fittedRect.height
+                            val hitRadiusPx = with(density) { 24.dp.roundToPx() }
+
+                            // Start handle drag target
+                            Box(
+                                modifier = Modifier
+                                    .offset {
+                                        IntOffset(
+                                            (startHandleX - hitRadiusPx).roundToInt(),
+                                            (startHandleY - hitRadiusPx / 2).roundToInt()
+                                        )
+                                    }
+                                    .size(48.dp)
+                                    .testTag("selection_start_handle")
+                                    .pointerInput(layoutForHandles, fittedRect) {
+                                        detectDragGestures { change, dragAmount ->
+                                            change.consume()
+                                            val curStart = selectionRange?.first ?: return@detectDragGestures
+                                            val curEnd = selectionRange?.last ?: return@detectDragGestures
+                                            val startGlyph = layoutForHandles.glyphs.getOrNull(curStart) ?: return@detectDragGestures
+                                            val curPx = Offset(
+                                                fittedRect.left + startGlyph.left * fittedRect.width,
+                                                fittedRect.top + ((startGlyph.top + startGlyph.bottom) * 0.5f) * fittedRect.height
+                                            )
+                                            val targetNorm = pointerToFittedNormalized(curPx + dragAmount, fittedRect)
+                                            val newIdx = PdfTextLayoutEngine.findNearestGlyphIndex(layoutForHandles, targetNorm.x, targetNorm.y)
+                                            if (newIdx != null) {
+                                                selectionRange = min(newIdx, curEnd)..max(newIdx, curEnd)
+                                            }
+                                        }
+                                    }
+                            )
+
+                            // End handle drag target
+                            Box(
+                                modifier = Modifier
+                                    .offset {
+                                        IntOffset(
+                                            (endHandleX - hitRadiusPx).roundToInt(),
+                                            (endHandleY - hitRadiusPx / 2).roundToInt()
+                                        )
+                                    }
+                                    .size(48.dp)
+                                    .testTag("selection_end_handle")
+                                    .pointerInput(layoutForHandles, fittedRect) {
+                                        detectDragGestures { change, dragAmount ->
+                                            change.consume()
+                                            val curStart = selectionRange?.first ?: return@detectDragGestures
+                                            val curEnd = selectionRange?.last ?: return@detectDragGestures
+                                            val endGlyph = layoutForHandles.glyphs.getOrNull(curEnd) ?: return@detectDragGestures
+                                            val curPx = Offset(
+                                                fittedRect.left + endGlyph.right * fittedRect.width,
+                                                fittedRect.top + ((endGlyph.top + endGlyph.bottom) * 0.5f) * fittedRect.height
+                                            )
+                                            val targetNorm = pointerToFittedNormalized(curPx + dragAmount, fittedRect)
+                                            val newIdx = PdfTextLayoutEngine.findNearestGlyphIndex(layoutForHandles, targetNorm.x, targetNorm.y)
+                                            if (newIdx != null) {
+                                                selectionRange = min(curStart, newIdx)..max(curStart, newIdx)
+                                            }
+                                        }
+                                    }
+                            )
+                        }
+                    }
+
+                    // Render interactive overlays for Sticky Notes, Stamps, Text Boxes, Redact/Whiteout, and Form Fields mapped inside fittedRect
                     Box(modifier = Modifier.fillMaxSize()) {
                         for (ann in pageAnnotations) {
                             if (ann.type == "STICKY_NOTE") {
                                 var showBubble by remember { mutableStateOf(false) }
-                                val noteX = with(density) { (ann.posX * pageSizePx.width).toDp() } - 14.dp
-                                val noteY = with(density) { (ann.posY * pageSizePx.height).toDp() } - 14.dp
+                                val noteX = with(density) { (fittedRect.left + ann.posX * fittedRect.width).toDp() } - 14.dp
+                                val noteY = with(density) { (fittedRect.top + ann.posY * fittedRect.height).toDp() } - 14.dp
                                 Box(
                                     modifier = Modifier
                                         .offset(x = noteX, y = noteY)
@@ -1219,8 +1586,8 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                     }
                                 }
                             } else if (ann.type == "STAMP") {
-                                val stampX = with(density) { (ann.posX * pageSizePx.width).toDp() } - 55.dp
-                                val stampY = with(density) { (ann.posY * pageSizePx.height).toDp() } - 18.dp
+                                val stampX = with(density) { (fittedRect.left + ann.posX * fittedRect.width).toDp() } - 55.dp
+                                val stampY = with(density) { (fittedRect.top + ann.posY * fittedRect.height).toDp() } - 18.dp
                                 Box(
                                     modifier = Modifier
                                         .offset(x = stampX, y = stampY)
@@ -1237,8 +1604,8 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                     )
                                 }
                             } else if (ann.type == "TEXT_BOX") {
-                                val boxX = with(density) { (ann.posX * pageSizePx.width).toDp() }
-                                val boxY = with(density) { (ann.posY * pageSizePx.height).toDp() } - 10.dp
+                                val boxX = with(density) { (fittedRect.left + ann.posX * fittedRect.width).toDp() }
+                                val boxY = with(density) { (fittedRect.top + ann.posY * fittedRect.height).toDp() } - 10.dp
                                 Box(
                                     modifier = Modifier
                                         .offset(x = boxX, y = boxY)
@@ -1258,18 +1625,37 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                         color = Color(ann.colorHex)
                                     )
                                 }
+                            } else if (ann.type == "FORM_FIELD" && activeTool != AnnotationTool.FORM_FIELD) {
+                                val fieldX = with(density) { (fittedRect.left + ann.posX * fittedRect.width).toDp() }
+                                val fieldY = with(density) { (fittedRect.top + ann.posY * fittedRect.height).toDp() }
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = AdfMidnightSurface.copy(alpha = 0.85f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, AdfElectricCyan.copy(alpha = 0.7f)),
+                                    modifier = Modifier
+                                        .offset(x = fieldX, y = fieldY)
+                                        .clickable { editingAnnotation = ann }
+                                ) {
+                                    Text(
+                                        text = ann.textContent,
+                                        color = AdfElectricCyan,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             } else if (ann.type == "WHITEOUT" || ann.type == "REDACT") {
                                 val isRedact = ann.type == "REDACT"
-                                val wDp = with(density) { ((if (ann.width > 0f) ann.width else 0.25f) * pageSizePx.width).toDp() }
-                                val hDp = with(density) { ((if (ann.height > 0f) ann.height else 0.04f) * pageSizePx.height).toDp() }
-                                val wX = with(density) { (ann.posX * pageSizePx.width).toDp() }
-                                val wY = with(density) { (ann.posY * pageSizePx.height).toDp() }
+                                val wDp = with(density) { ((if (ann.width > 0f) ann.width else 0.25f) * fittedRect.width).toDp() }
+                                val hDp = with(density) { ((if (ann.height > 0f) ann.height else 0.04f) * fittedRect.height).toDp() }
+                                val wX = with(density) { (fittedRect.left + ann.posX * fittedRect.width).toDp() }
+                                val wY = with(density) { (fittedRect.top + ann.posY * fittedRect.height).toDp() }
                                 Box(
                                     modifier = Modifier
                                         .offset(x = wX, y = wY)
                                         .size(wDp, hDp)
                                         .background(if (isRedact) Color.Black else Color.White)
-                                        .border(1.dp, if (isRedact) Color.Gray else Color(0xFFCBD5E1), RoundedCornerShape(2.dp))
+                                        .border(1.dp, if (isRedact) Color(0xFFEF4444) else Color(0xFFCBD5E1), RoundedCornerShape(2.dp))
                                         .clickable { editingAnnotation = ann }
                                         .padding(horizontal = 4.dp),
                                     contentAlignment = Alignment.CenterStart
@@ -1282,6 +1668,14 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                             fontWeight = FontWeight.Bold,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
+                                        )
+                                    } else if (isRedact) {
+                                        Text(
+                                            text = "MARKED FOR REDACTION",
+                                            color = Color(0xFFEF4444),
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
                                         )
                                     }
                                 }
@@ -1310,20 +1704,20 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                 }
 
                                 val boxLeftPx = if (isTypedSig) {
-                                    (ann.posX + liveDrag.x) * pageSizePx.width - 10f
+                                    fittedRect.left + (ann.posX + liveDrag.x) * fittedRect.width - 10f
                                 } else {
-                                    (ann.posX + liveDrag.x) * pageSizePx.width
+                                    fittedRect.left + (ann.posX + liveDrag.x) * fittedRect.width
                                 }
                                 val boxTopPx = if (isTypedSig) {
-                                    (ann.posY + liveDrag.y) * pageSizePx.height - textSizePx - 4f
+                                    fittedRect.top + (ann.posY + liveDrag.y) * fittedRect.height - textSizePx - 4f
                                 } else {
-                                    (ann.posY + liveDrag.y) * pageSizePx.height
+                                    fittedRect.top + (ann.posY + liveDrag.y) * fittedRect.height
                                 }
 
                                 val boxX = with(density) { boxLeftPx.toDp() }
                                 val boxY = with(density) { boxTopPx.toDp() }
-                                val boxW = with(density) { (sigWNorm * pageSizePx.width).toDp() }.coerceAtLeast(72.dp)
-                                val boxH = with(density) { (sigHNorm * pageSizePx.height).toDp() }.coerceAtLeast(36.dp)
+                                val boxW = with(density) { (sigWNorm * fittedRect.width).toDp() }.coerceAtLeast(72.dp)
+                                val boxH = with(density) { (sigHNorm * fittedRect.height).toDp() }.coerceAtLeast(36.dp)
                                 val isSelected = selectedSignatureAnnId == ann.id
                                 val canMoveSignatures = activeTool != AnnotationTool.PEN && activeTool != AnnotationTool.HIGHLIGHT
 
@@ -1601,6 +1995,149 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                     )
                 }
             }
+
+            // Persistent Form Fill Overlay when Form Tool is active
+            if (activeTool == AnnotationTool.FORM_FIELD) {
+                FormFillOverlay(
+                    isEditing = true,
+                    persistedFields = pageAnnotations.filter { it.type == "FORM_FIELD" },
+                    onAddPersistedField = { fieldType, xRatio, yRatio, defaultVal ->
+                        viewModel.addAnnotation(
+                            pageIndex = currentPage,
+                            type = "FORM_FIELD",
+                            posX = xRatio,
+                            posY = yRatio,
+                            colorHex = 0xFF0F172AL,
+                            strokeWidth = 13f,
+                            textContent = defaultVal,
+                            extraData = fieldType.name
+                        )
+                    },
+                    onUpdatePersistedField = { updated -> viewModel.updateAnnotation(updated) },
+                    onDeletePersistedField = { id -> viewModel.deleteAnnotation(id) },
+                    onClose = { viewModel.setActiveTool(AnnotationTool.NONE) }
+                )
+            }
+
+            // Mode hint or honest scanned-page unavailability notice
+            val layoutState = currentPageTextLayout
+            val bannerMessage = when {
+                selectionUnavailableNotice != null -> selectionUnavailableNotice
+                activeTool == AnnotationTool.TEXT_SELECT && layoutState != null && !layoutState.isSelectable ->
+                    layoutState.unavailableReason ?: "Scanned or image-only page: no embedded text layer available."
+                activeTool == AnnotationTool.TEXT_SELECT && selectionRange == null ->
+                    "Text Selection Mode: tap or drag across text to select"
+                else -> null
+            }
+            if (!bannerMessage.isNullOrBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xEE0F172A),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, AdfElectricCyan.copy(alpha = 0.5f)),
+                    shadowElevation = 6.dp,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 12.dp, start = 16.dp, end = 16.dp)
+                        .testTag("text_selection_notice_banner")
+                ) {
+                    Text(
+                        text = bannerMessage,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                    )
+                }
+            }
+
+            // Floating Selection Contextual Action Bar
+            val activeLayout = currentPageTextLayout
+            val curSel = selectionRange
+            if (activeLayout != null && activeLayout.isSelectable && curSel != null) {
+                val selectedString = remember(activeLayout, curSel) {
+                    PdfTextLayoutEngine.getSelectedText(activeLayout, curSel)
+                }
+                if (selectedString.isNotBlank()) {
+                    val stageLabel = when (selectionExpandStage % 3) {
+                        0 -> "Sentence"
+                        1 -> "Paragraph"
+                        else -> "Word"
+                    }
+                    SelectionFloatingActionBar(
+                        selectedText = selectedString,
+                        expandStageLabel = stageLabel,
+                        onCopy = {
+                            clipboardManager.setText(AnnotatedString(selectedString))
+                            viewModel.postStatusMessage("Copied ${selectedString.length} characters to clipboard")
+                        },
+                        onExpandSelection = {
+                            val stage = selectionExpandStage % 3
+                            selectionRange = when (stage) {
+                                0 -> PdfTextLayoutEngine.expandToSentence(activeLayout, curSel.first)
+                                1 -> PdfTextLayoutEngine.expandToParagraph(activeLayout, curSel.first)
+                                else -> PdfTextLayoutEngine.expandToWord(activeLayout, curSel.first)
+                            }
+                            selectionExpandStage = (selectionExpandStage + 1) % 3
+                        },
+                        onSelectAll = {
+                            if (activeLayout.glyphs.isNotEmpty()) {
+                                selectionRange = 0..activeLayout.glyphs.lastIndex
+                            }
+                        },
+                        onUnderlineSelection = {
+                            val rects = PdfTextLayoutEngine.getSelectionHighlightRects(activeLayout, curSel)
+                            rects.forEach { r ->
+                                viewModel.addAnnotation(
+                                    pageIndex = currentPage,
+                                    type = "UNDERLINE",
+                                    posX = r.left,
+                                    posY = r.bottom,
+                                    width = (r.right - r.left).coerceAtLeast(0.02f),
+                                    colorHex = 0xFF2563EB,
+                                    strokeWidth = 3f
+                                )
+                            }
+                            selectionRange = null
+                        },
+                        onStrikeSelection = {
+                            val rects = PdfTextLayoutEngine.getSelectionHighlightRects(activeLayout, curSel)
+                            rects.forEach { r ->
+                                viewModel.addAnnotation(
+                                    pageIndex = currentPage,
+                                    type = "STRIKETHROUGH",
+                                    posX = r.left,
+                                    posY = (r.top + r.bottom) * 0.5f,
+                                    width = (r.right - r.left).coerceAtLeast(0.02f),
+                                    colorHex = 0xFFDC2626,
+                                    strokeWidth = 3f
+                                )
+                            }
+                            selectionRange = null
+                        },
+                        onSearch = {
+                            val query = selectedString.trim().replace("\n", " ").take(60)
+                            selectionRange = null
+                            viewModel.toggleSearch(true)
+                            viewModel.performSearch(query)
+                        },
+                        onShareText = {
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, selectedString)
+                                putExtra(Intent.EXTRA_SUBJECT, "Excerpt from ${currentDoc?.title ?: "Document"}")
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Share Selected Text"))
+                        },
+                        onClear = {
+                            selectionRange = null
+                            selectionUnavailableNotice = null
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 12.dp)
+                    )
+                }
+            }
         }
 
         // Floating Acrobat Read Out Loud TTS Player Dock
@@ -1679,6 +2216,31 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                             Icon(Icons.Default.Close, contentDescription = "Stop", tint = AcrobatTextMuted)
                         }
                     }
+                }
+            }
+
+            // Floating Permanent Redaction Action Pill when REDACT boxes exist and selection bar is inactive
+            if (redactCount > 0 && selectionRange == null && !isPureViewerMode) {
+                Button(
+                    onClick = { showApplyRedactionDialog = true },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFDC2626),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 14.dp)
+                        .testTag("apply_redaction_button")
+                ) {
+                    Icon(Icons.Default.VerifiedUser, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Apply Permanent Redaction ($redactCount)",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -1810,7 +2372,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
     if (showWhiteoutDialog) {
         var whiteoutWidthChoice by remember { mutableFloatStateOf(0.35f) }
         var whiteoutHeightChoice by remember { mutableFloatStateOf(0.04f) }
-        var isRedactStyle by remember { mutableStateOf(false) }
+        var isRedactStyle by remember(isWhiteoutRedact) { mutableStateOf(isWhiteoutRedact) }
 
         AlertDialog(
             onDismissRequest = { showWhiteoutDialog = false },
@@ -1818,13 +2380,21 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.LayersClear, contentDescription = null, tint = Color(0xFFF43F5E), modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Whiteout / Content Erase", color = AcrobatTextPrimary, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = if (isRedactStyle) "Mark Area for Redaction" else "Whiteout / Content Erase",
+                        color = AcrobatTextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Blanks out underlying PDF text or graphics. You can also type replacement text to edit the content directly.",
+                        text = if (isRedactStyle) {
+                            "Marks an area for redaction. Run 'Apply Permanent Redaction' to strip underlying PDF text, objects & metadata cleanly."
+                        } else {
+                            "Blanks out visual content on the page. You can also type replacement text to overlay."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = AcrobatTextSecondary
                     )
@@ -1833,7 +2403,7 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                         value = whiteoutReplacementText,
                         onValueChange = { whiteoutReplacementText = it },
                         label = { Text("Replacement Text (Optional)") },
-                        placeholder = { Text("Type new text to overlay...") },
+                        placeholder = { Text("Type new text or leave blank...") },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = AcrobatTextPrimary,
                             unfocusedTextColor = AcrobatTextPrimary,
@@ -1892,14 +2462,15 @@ fun ReaderScreen(viewModel: PdfViewModel) {
                                 width = whiteoutWidthChoice,
                                 height = whiteoutHeightChoice,
                                 replacementText = whiteoutReplacementText,
-                                colorHex = if (isRedactStyle) 0xFF000000L else 0xFFFFFFFFL
+                                colorHex = if (isRedactStyle) 0xFF000000L else 0xFFFFFFFFL,
+                                isRedaction = isRedactStyle
                             )
                         }
                         showWhiteoutDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)
                 ) {
-                    Text("Apply Whiteout")
+                    Text(if (isRedactStyle) "Mark Redaction" else "Apply Whiteout")
                 }
             },
             dismissButton = {
@@ -2244,6 +2815,231 @@ fun ReaderScreen(viewModel: PdfViewModel) {
             totalPages = totalPages,
             savedSignatures = signatures,
             onDismiss = { viewModel.showSignatureDialog(false) }
+        )
+    }
+
+    // Real Storage Rename Dialog
+    if (showRenameDialog && currentDoc != null) {
+        RenameDocumentDialog(
+            currentTitle = currentDoc!!.title,
+            isRenaming = isRenamingFile,
+            externalError = renameErrorText,
+            onDismiss = { showRenameDialog = false },
+            onConfirmRename = { requestedName ->
+                isRenamingFile = true
+                renameErrorText = null
+                viewModel.renameActiveDocument(requestedName) { result ->
+                    isRenamingFile = false
+                    when (result) {
+                        is StorageRenameCoordinator.RenameResult.Success -> {
+                            showRenameDialog = false
+                        }
+                        is StorageRenameCoordinator.RenameResult.ValidationError -> {
+                            renameErrorText = result.reason
+                        }
+                        is StorageRenameCoordinator.RenameResult.NameCollision -> {
+                            renameErrorText = result.reason
+                        }
+                        is StorageRenameCoordinator.RenameResult.Failure -> {
+                            renameErrorText = result.reason
+                        }
+                        is StorageRenameCoordinator.RenameResult.ProviderDenied -> {
+                            showRenameDialog = false
+                            providerDeniedInfo = result
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    // External Provider Rename Denied -> Offer Save Copy As
+    providerDeniedInfo?.let { denied ->
+        ProviderDeniedSaveCopyDialog(
+            reason = denied.reason,
+            suggestedFileName = denied.suggestedFileName,
+            onDismiss = { providerDeniedInfo = null },
+            onSaveCopyAs = {
+                saveCopyLauncher.launch(denied.suggestedFileName)
+            }
+        )
+    }
+
+    // 4-Option Share Modal Bottom Sheet
+    if (showShareSheet && currentDoc != null) {
+        ShareOptionsBottomSheet(
+            doc = currentDoc!!,
+            annotationCount = annotations.size,
+            hasWatermark = activeWatermark != null,
+            isPreparingShare = isPreparingShare,
+            onDismiss = { showShareSheet = false },
+            onSelectOption = { option, customName ->
+                isPreparingShare = true
+                viewModel.prepareShare(option = option, customPdfName = customName) { result ->
+                    isPreparingShare = false
+                    result.onSuccess { prepared ->
+                        showShareSheet = false
+                        context.startActivity(ShareCoordinator.buildShareIntent(context, prepared))
+                    }.onFailure { err ->
+                        viewModel.postStatusMessage(err.localizedMessage ?: "Failed to prepare share file")
+                    }
+                }
+            }
+        )
+    }
+
+    // Bookmarks Bottom Sheet
+    if (showBookmarksSheet) {
+        BookmarksBottomSheet(
+            currentPage = currentPage,
+            bookmarks = currentBookmarks,
+            onDismiss = { showBookmarksSheet = false },
+            onAddBookmark = { pageIdx, label -> viewModel.addBookmark(pageIdx, label) },
+            onSelectBookmark = { pageIdx -> viewModel.setCurrentPage(pageIdx) },
+            onDeleteBookmark = { id -> viewModel.deleteBookmark(id) }
+        )
+    }
+
+    // Permanent Redaction & Metadata Scrub Warning Dialog
+    if (showApplyRedactionDialog && currentDoc != null) {
+        val redactedPageCount = remember(annotations) {
+            annotations.filter { it.type == "REDACT" }.map { it.pageIndex }.distinct().size
+        }
+        AlertDialog(
+            onDismissRequest = { if (!isApplyingRedaction) showApplyRedactionDialog = false },
+            containerColor = AcrobatDarkSurfaceElevated,
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Security,
+                    contentDescription = null,
+                    tint = Color(0xFFF43F5E),
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Apply Permanent Redaction?",
+                    color = AcrobatTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "$redactCount redaction box(es) across $redactedPageCount page(s) will be permanently baked into the PDF.",
+                        color = AcrobatTextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "• Redacted pages are converted into flattened lossless raster images, permanently destroying underlying text operators, links, and vector layers inside those pages (selectable text on redacted pages will no longer exist).",
+                        color = AcrobatTextSecondary,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        text = "• Document metadata (Author, Title, Subject, Keywords, XMP), AcroForm fields, and page annotations are permanently scrubbed.",
+                        color = AcrobatTextSecondary,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        text = "• The output PDF is automatically inspected to verify redacted text is unrecoverable before saving.",
+                        color = Color(0xFF10B981),
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        isApplyingRedaction = true
+                        viewModel.applyPermanentRedaction(currentDoc!!, overwriteOriginal = false) { res ->
+                            isApplyingRedaction = false
+                            showApplyRedactionDialog = false
+                            redactionResultInfo = res
+                        }
+                    },
+                    enabled = !isApplyingRedaction,
+                    colors = ButtonDefaults.buttonColors(containerColor = AdfElectricCyan, contentColor = AdfMidnightBackground),
+                    modifier = Modifier.testTag("confirm_redaction_copy_button")
+                ) {
+                    if (isApplyingRedaction) {
+                        CircularProgressIndicator(color = AdfMidnightBackground, modifier = Modifier.size(16.dp))
+                    } else {
+                        Text("Save Sanitized Copy", fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        onClick = {
+                            isApplyingRedaction = true
+                            viewModel.applyPermanentRedaction(currentDoc!!, overwriteOriginal = true) { res ->
+                                isApplyingRedaction = false
+                                showApplyRedactionDialog = false
+                                redactionResultInfo = res
+                            }
+                        },
+                        enabled = !isApplyingRedaction,
+                        modifier = Modifier.testTag("confirm_redaction_overwrite_button")
+                    ) {
+                        Text("Overwrite Original", color = Color(0xFFF43F5E), fontWeight = FontWeight.SemiBold)
+                    }
+                    TextButton(
+                        onClick = { showApplyRedactionDialog = false },
+                        enabled = !isApplyingRedaction
+                    ) {
+                        Text("Cancel", color = AcrobatTextSecondary)
+                    }
+                }
+            }
+        )
+    }
+
+    // Post-Redaction Verification Summary Dialog
+    redactionResultInfo?.let { res ->
+        AlertDialog(
+            onDismissRequest = { redactionResultInfo = null },
+            containerColor = AcrobatDarkSurfaceElevated,
+            icon = {
+                Icon(
+                    imageVector = if (res.success && res.verifiedUnrecoverable) Icons.Default.VerifiedUser else Icons.Default.ErrorOutline,
+                    contentDescription = null,
+                    tint = if (res.success && res.verifiedUnrecoverable) Color(0xFF10B981) else Color(0xFFEF4444),
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (res.success && res.verifiedUnrecoverable) "Redaction Verified & Complete" else "Redaction Verification Failed",
+                    color = AcrobatTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                if (res.success && res.verifiedUnrecoverable) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("File: ${res.outputFile?.name ?: "Sanitized PDF"}", color = AcrobatTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("• ${res.redactedPages.size} page(s) permanently sanitized (${res.boxesApplied} box(es))", color = AcrobatTextSecondary, fontSize = 12.sp)
+                        Text("• ${res.verifiedSnippetsCleared} pre-redaction text region(s) confirmed unrecoverable", color = Color(0xFF10B981), fontSize = 12.sp)
+                        Text("• Metadata, XMP, AcroForm & annotations scrubbed: ${if (res.metadataScrubbed) "Verified" else "No"}", color = AcrobatTextSecondary, fontSize = 12.sp)
+                    }
+                } else {
+                    Text(
+                        text = res.errorMessage ?: "Sanitization could not be verified.",
+                        color = Color(0xFFEF4444),
+                        fontSize = 13.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { redactionResultInfo = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = AdfElectricCyan, contentColor = AdfMidnightBackground)
+                ) {
+                    Text("Done", fontWeight = FontWeight.Bold)
+                }
+            }
         )
     }
 }

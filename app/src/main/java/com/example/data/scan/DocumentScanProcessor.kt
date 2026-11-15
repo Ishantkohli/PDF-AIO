@@ -10,7 +10,10 @@ import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * Professional document enhancement filter modes
@@ -30,7 +33,8 @@ data class ScannedPage(
     val sourceUri: Uri,
     val rotationDegrees: Int = 0,
     val filter: ScanFilter = ScanFilter.WHITE_GREY,
-    val filterIntensity: Float = 1.0f
+    val filterIntensity: Float = 1.0f,
+    val cropQuad: DocumentEdgeDetector.NormalizedQuad? = null
 )
 
 /**
@@ -208,6 +212,53 @@ object DocumentScanProcessor {
     }
 
     /**
+     * Performs a 4-point perspective homography warp from normalized [0..1] quadrilateral corners
+     * (TL, TR, BR, BL) onto an upright rectangular document bitmap using Matrix.setPolyToPoly.
+     */
+    fun warpPerspectiveQuad(source: Bitmap, quad: DocumentEdgeDetector.NormalizedQuad): Bitmap {
+        val sw = source.width.toFloat()
+        val sh = source.height.toFloat()
+        val tlx = (quad.topLeft.x * sw).coerceIn(0f, sw)
+        val tly = (quad.topLeft.y * sh).coerceIn(0f, sh)
+        val trx = (quad.topRight.x * sw).coerceIn(0f, sw)
+        val try_ = (quad.topRight.y * sh).coerceIn(0f, sh)
+        val brx = (quad.bottomRight.x * sw).coerceIn(0f, sw)
+        val bry = (quad.bottomRight.y * sh).coerceIn(0f, sh)
+        val blx = (quad.bottomLeft.x * sw).coerceIn(0f, sw)
+        val bly = (quad.bottomLeft.y * sh).coerceIn(0f, sh)
+
+        val topW = hypot(trx - tlx, try_ - tly)
+        val botW = hypot(brx - blx, bry - bly)
+        val leftH = hypot(blx - tlx, bly - tly)
+        val rightH = hypot(brx - trx, bry - try_)
+
+        var outW = max(topW, botW).roundToInt().coerceAtLeast(120)
+        var outH = max(leftH, rightH).roundToInt().coerceAtLeast(120)
+        val maxDim = 2200
+        if (outW > maxDim || outH > maxDim) {
+            val s = maxDim.toFloat() / max(outW, outH)
+            outW = (outW * s).roundToInt().coerceAtLeast(120)
+            outH = (outH * s).roundToInt().coerceAtLeast(120)
+        }
+
+        val srcPts = floatArrayOf(tlx, tly, trx, try_, brx, bry, blx, bly)
+        val dstPts = floatArrayOf(0f, 0f, outW.toFloat(), 0f, outW.toFloat(), outH.toFloat(), 0f, outH.toFloat())
+
+        val matrix = Matrix()
+        val ok = matrix.setPolyToPoly(srcPts, 0, dstPts, 0, 4)
+        if (!ok) {
+            return trimPageMargins(source, 0.04f)
+        }
+
+        val result = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+        canvas.drawColor(Color.WHITE)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        canvas.drawBitmap(source, matrix, paint)
+        return result
+    }
+
+    /**
      * Generates a fast scaled thumbnail for live filter previews in the filter selection bar.
      */
     fun createFilterPreviewThumbnail(source: Bitmap, filter: ScanFilter, targetSize: Int = 120): Bitmap {
@@ -244,12 +295,19 @@ object DocumentScanProcessor {
         pages.forEachIndexed { index, scannedPage ->
             val rawBitmap = loadBitmapFromUri(context, scannedPage.sourceUri)
             if (rawBitmap != null) {
+                val warped = scannedPage.cropQuad?.let { quad ->
+                    warpPerspectiveQuad(rawBitmap, quad)
+                }
+                val inputForFilter = warped ?: rawBitmap
                 val processed = processBitmap(
-                    source = rawBitmap,
+                    source = inputForFilter,
                     filter = scannedPage.filter,
                     rotationDegrees = scannedPage.rotationDegrees,
                     filterIntensity = scannedPage.filterIntensity
                 )
+                if (warped != null && warped !== processed && !warped.isRecycled) {
+                    warped.recycle()
+                }
 
                 val pageInfo = PdfDocument.PageInfo.Builder(standardWidth, standardHeight, index + 1).create()
                 val page = pdfDocument.startPage(pageInfo)

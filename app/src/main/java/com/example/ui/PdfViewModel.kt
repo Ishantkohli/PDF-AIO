@@ -8,14 +8,22 @@ import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AnnotationEntity
+import com.example.data.local.BookmarkEntity
 import com.example.data.local.DocumentEntity
 import com.example.data.local.PdfDatabase
 import com.example.data.local.SignatureEntity
+import com.example.data.local.StorageRenameCoordinator
 import com.example.data.pdf.DocumentConverterEngine
+import com.example.data.pdf.PdfCompressorEngine
 import com.example.data.pdf.PdfExportEngine
+import com.example.data.pdf.PdfRedactionEngine
 import com.example.data.pdf.PdfRendererManager
+import com.example.data.pdf.PdfSecurityEngine
+import com.example.data.pdf.PdfTextLayoutEngine
 import com.example.data.pdf.SampleDocumentGenerator
+import com.example.data.pdf.ShareCoordinator
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -39,18 +47,24 @@ enum class AppScreen {
     CREDITS,
     PDF_DIFF,
     FEEDBACK,
-    TXT_VIEWER
+    TXT_VIEWER,
+    LEGAL_CENTER
 }
 
 enum class AnnotationTool {
     NONE,
+    TEXT_SELECT,
     PEN,
     HIGHLIGHT,
+    UNDERLINE,
+    STRIKETHROUGH,
     STICKY_NOTE,
     STAMP,
     SIGNATURE,
     TEXT_BOX,
     WHITEOUT,
+    REDACT,
+    FORM_FIELD,
     WATERMARK,
     ERASER
 }
@@ -66,22 +80,27 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
     val signatures: StateFlow<List<SignatureEntity>> = dao.getAllSignatures()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    init {
+    // Startup initialization block intentionally placed below all StateFlow/field initializers.
+
+    private fun removeSampleFiles() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val cacheFiles = application.cacheDir.listFiles()
-                cacheFiles?.forEach { file ->
-                    if (file.name.startsWith("imp_ppt_") || file.name.startsWith("temp_ppt_") || file.name.startsWith("ppt_media_")) {
-                        file.deleteRecursively()
-                    }
-                }
-            } catch (ignored: Exception) {}
+                SampleDocumentGenerator.deleteSampleFiles(getApplication())
+                dao.deleteSampleDocuments()
+            } catch (_: Exception) {}
         }
     }
 
     // Navigation state
     private val _currentScreen = MutableStateFlow(AppScreen.HOME)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
+
+    fun navigateTo(screen: AppScreen) {
+        if (screen != AppScreen.READER) {
+            ttsManager.stop()
+        }
+        _currentScreen.value = screen
+    }
 
     // FPS Telemetry HUD state
     private val _showFpsHud = MutableStateFlow(false)
@@ -268,9 +287,39 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
     private val _readingMode = MutableStateFlow("VERTICAL") // VERTICAL, HORIZONTAL
     val readingMode: StateFlow<String> = _readingMode.asStateFlow()
 
-    // Annotations for active document
+    // Annotations & Undo/Redo history for active document
     private val _currentAnnotations = MutableStateFlow<List<AnnotationEntity>>(emptyList())
     val currentAnnotations: StateFlow<List<AnnotationEntity>> = _currentAnnotations.asStateFlow()
+
+    private sealed class AnnotationAction {
+        data class Added(val annotation: AnnotationEntity) : AnnotationAction()
+        data class Deleted(val annotation: AnnotationEntity) : AnnotationAction()
+        data class Updated(val previous: AnnotationEntity, val updated: AnnotationEntity) : AnnotationAction()
+        data class ClearedPage(val removed: List<AnnotationEntity>) : AnnotationAction()
+    }
+
+    private val undoStack = ArrayDeque<AnnotationAction>()
+    private val redoStack = ArrayDeque<AnnotationAction>()
+    private val _canUndo = MutableStateFlow(false)
+    val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
+    private val _canRedo = MutableStateFlow(false)
+    val canRedo: StateFlow<Boolean> = _canRedo.asStateFlow()
+
+    private fun syncUndoRedoFlags() {
+        _canUndo.value = undoStack.isNotEmpty()
+        _canRedo.value = redoStack.isNotEmpty()
+    }
+
+    // Bookmarks for active document
+    private val _currentBookmarks = MutableStateFlow<List<BookmarkEntity>>(emptyList())
+    val currentBookmarks: StateFlow<List<BookmarkEntity>> = _currentBookmarks.asStateFlow()
+    private var bookmarksJob: Job? = null
+
+    // Per-page native PDF text selection layout cache
+    private val _currentPageTextLayout = MutableStateFlow<PdfTextLayoutEngine.PageTextLayout?>(null)
+    val currentPageTextLayout: StateFlow<PdfTextLayoutEngine.PageTextLayout?> = _currentPageTextLayout.asStateFlow()
+    private var cachedLayoutFileKey: String = ""
+    private val pageLayoutCache = mutableMapOf<Int, PdfTextLayoutEngine.PageTextLayout>()
 
     // Active Annotation Tool
     private val _activeTool = MutableStateFlow(AnnotationTool.NONE)
@@ -281,6 +330,13 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _activeStrokeWidth = MutableStateFlow(4f)
     val activeStrokeWidth: StateFlow<Float> = _activeStrokeWidth.asStateFlow()
+
+    private val _activeOpacity = MutableStateFlow(1.0f)
+    val activeOpacity: StateFlow<Float> = _activeOpacity.asStateFlow()
+
+    fun setActiveOpacity(opacity: Float) {
+        _activeOpacity.value = opacity.coerceIn(0.15f, 1.0f)
+    }
 
     // Digital Signature Modal State
     private val _isSignatureDialogVisible = MutableStateFlow(false)
@@ -293,6 +349,10 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
     // Status / Toast Messages
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
+    fun postStatusMessage(message: String) {
+        _statusMessage.value = message
+    }
 
     // TTS Read Aloud Engine
     private val ttsManager = com.example.data.pdf.TtsManager(application)
@@ -415,6 +475,22 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
     private var cachedExtractedPath: String? = null
     private var cachedExtractedPages: List<com.example.data.pdf.PdfTextExtractor.ExtractedPage> = emptyList()
 
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cacheFiles = application.cacheDir.listFiles()
+                cacheFiles?.forEach { file ->
+                    if (file.name.startsWith("imp_ppt_") || file.name.startsWith("temp_ppt_") || file.name.startsWith("ppt_media_")) {
+                        file.deleteRecursively()
+                    }
+                }
+                ShareCoordinator.cleanupExpiredStaging(application)
+            } catch (_: Exception) {}
+        }
+        removeSampleFiles()
+        scanDeviceDocuments()
+    }
+
     private fun countPdfPagesSafely(file: File): Int {
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
             android.graphics.pdf.PdfRenderer(pfd).use { renderer ->
@@ -453,26 +529,6 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         setCurrentPage(results[prevIdx])
     }
 
-    init {
-        removeSampleFiles()
-        scanDeviceDocuments()
-    }
-
-    private fun removeSampleFiles() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                dao.deleteSampleDocuments()
-                SampleDocumentGenerator.deleteSampleFiles(getApplication())
-            } catch (e: Exception) {
-                android.util.Log.w("PdfViewModel", "Failed to remove sample files: ${e.message}")
-            }
-        }
-    }
-
-    fun navigateTo(screen: AppScreen) {
-        _currentScreen.value = screen
-    }
-
     fun openDocument(doc: DocumentEntity) {
         viewModelScope.launch {
             rendererManager?.close()
@@ -480,7 +536,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
 
             val file = File(doc.filePath)
             if (!file.exists()) {
-                _statusMessage.value = "Document file not found: ${doc.title}"
+                _statusMessage.value = "Document file not found"
                 return@launch
             }
 
@@ -494,19 +550,46 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                 _readingMode.value = doc.readingMode
                 _currentScreen.value = AppScreen.READER
                 _pageBitmaps.value = emptyMap()
+                _currentPageTextLayout.value = null
+                pageLayoutCache.clear()
+                cachedLayoutFileKey = "${file.absolutePath}_${file.lastModified()}"
+                undoStack.clear()
+                redoStack.clear()
+                syncUndoRedoFlags()
 
-                // Load annotations for document
                 loadAnnotationsForDoc(doc.id)
-
-                // Update last read timestamp in db
+                observeBookmarksForDoc(doc.id)
                 dao.updateProgress(doc.id, _currentPage.value)
 
-                // Pre-render current page and neighbors
                 renderPage(_currentPage.value)
                 if (_currentPage.value + 1 < manager.pageCount) renderPage(_currentPage.value + 1)
+                loadPageTextLayout(_currentPage.value)
             } catch (e: Exception) {
-                e.printStackTrace()
                 _statusMessage.value = "Failed to open PDF: ${e.localizedMessage}"
+            }
+        }
+    }
+
+    fun loadPageTextLayout(pageIndex: Int) {
+        val doc = _currentDocument.value ?: return
+        val file = File(doc.filePath)
+        if (!file.exists()) return
+        val fileKey = "${file.absolutePath}_${file.lastModified()}"
+        if (cachedLayoutFileKey != fileKey) {
+            cachedLayoutFileKey = fileKey
+            pageLayoutCache.clear()
+        }
+        pageLayoutCache[pageIndex]?.let { cached ->
+            if (pageIndex == _currentPage.value) {
+                _currentPageTextLayout.value = cached
+            }
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val layout = PdfTextLayoutEngine.extractPageLayout(getApplication(), file, pageIndex)
+            pageLayoutCache[pageIndex] = layout
+            if (_currentPage.value == pageIndex) {
+                _currentPageTextLayout.value = layout
             }
         }
     }
@@ -518,23 +601,29 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     context.contentResolver.takePersistableUriPermission(
                         uri,
-                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                     )
-                } catch (ignored: Exception) {}
-
-                var title = "Imported Document"
-                var size = 0L
-
-                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                    val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    if (cursor.moveToFirst()) {
-                        if (nameIdx != -1) title = cursor.getString(nameIdx) ?: title
-                        if (sizeIdx != -1) size = cursor.getLong(sizeIdx)
-                    }
+                } catch (_: Exception) {
+                    try {
+                        context.contentResolver.takePersistableUriPermission(
+                            uri,
+                            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (_: Exception) {}
                 }
 
-                // Route TXT files directly to TXT Viewer; keep only PDFs for PDF Reader
+                var title = "Imported Document"
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (cursor.moveToFirst() && nameIdx != -1) {
+                        title = cursor.getString(nameIdx) ?: title
+                    }
+                }
+                if (title == "Imported Document" && uri.scheme == "file") {
+                    uri.path?.let { p -> title = File(p).name }
+                }
+
                 val lowerTitle = title.lowercase()
                 val mimeType = context.contentResolver.getType(uri)?.lowercase() ?: ""
                 if (lowerTitle.endsWith(".txt") || mimeType == "text/plain") {
@@ -552,12 +641,17 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                val docsDir = File(context.filesDir, "imported_pdfs")
-                if (!docsDir.exists()) docsDir.mkdirs()
+                val docsDir = File(context.filesDir, "imported_pdfs").apply { if (!exists()) mkdirs() }
+                val baseTitle = StorageRenameCoordinator.sanitizeForStorageFileName(title, fallback = "Document")
+                var destFile = File(docsDir, "$baseTitle.pdf")
+                if (destFile.exists()) {
+                    var suffix = 1
+                    while (destFile.exists()) {
+                        destFile = File(docsDir, "${baseTitle}_$suffix.pdf")
+                        suffix++
+                    }
+                }
 
-                // Sanitize filename while supporting all worldwide international Unicode characters (Arabic, Chinese, Japanese, Cyrillic, etc.)
-                val sanitizedTitle = title.replace(Regex("[^a-zA-Z0-9._\\-\\p{L}]"), "_").ifBlank { "document.pdf" }
-                val destFile = File(docsDir, "${System.currentTimeMillis()}_$sanitizedTitle")
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     FileOutputStream(destFile).use { output ->
                         input.copyTo(output)
@@ -566,13 +660,14 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
 
                 if (destFile.exists() && destFile.length() > 0) {
                     val pages = countPdfPagesSafely(destFile)
-
+                    val externalSourceUri = if (uri.scheme == "content") uri.toString() else ""
                     val newDoc = DocumentEntity(
                         uriString = Uri.fromFile(destFile).toString(),
-                        title = title.removeSuffix(".pdf"),
+                        title = baseTitle,
                         filePath = destFile.absolutePath,
                         pageCount = pages,
-                        fileSizeBytes = destFile.length()
+                        fileSizeBytes = destFile.length(),
+                        sourceUri = externalSourceUri
                     )
                     val id = dao.insertDocument(newDoc)
                     withContext(Dispatchers.Main) {
@@ -595,14 +690,15 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val pages = countPdfPagesSafely(pdfFile)
-
+                val cleanBase = StorageRenameCoordinator.sanitizeForStorageFileName(title, fallback = "Scan")
                 val newDoc = DocumentEntity(
                     uriString = Uri.fromFile(pdfFile).toString(),
-                    title = title.removeSuffix(".pdf"),
+                    title = cleanBase,
                     filePath = pdfFile.absolutePath,
                     pageCount = pages,
                     fileSizeBytes = pdfFile.length(),
-                    lastOpenedTimestamp = System.currentTimeMillis()
+                    lastOpenedTimestamp = System.currentTimeMillis(),
+                    folderCategory = "Scanned"
                 )
                 val id = dao.insertDocument(newDoc)
                 val savedDoc = newDoc.copy(id = id)
@@ -611,7 +707,6 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                     onRegistered(savedDoc)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
                 withContext(Dispatchers.Main) {
                     _statusMessage.value = "Failed to register scanned document: ${e.localizedMessage}"
                 }
@@ -667,6 +762,7 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         renderPage(clamped)
         if (clamped + 1 < total) renderPage(clamped + 1)
         if (clamped - 1 >= 0) renderPage(clamped - 1)
+        loadPageTextLayout(clamped)
 
         val doc = _currentDocument.value
         if (doc != null) {
@@ -693,22 +789,127 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleFavorite(doc: DocumentEntity) {
         viewModelScope.launch(Dispatchers.IO) {
             dao.setFavorite(doc.id, !doc.isFavorite)
+            if (_currentDocument.value?.id == doc.id) {
+                _currentDocument.value = _currentDocument.value?.copy(isFavorite = !doc.isFavorite)
+            }
+        }
+    }
+
+    fun togglePin(doc: DocumentEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.setPinned(doc.id, !doc.isPinned)
+            if (_currentDocument.value?.id == doc.id) {
+                _currentDocument.value = _currentDocument.value?.copy(isPinned = !doc.isPinned)
+            }
+        }
+    }
+
+    fun updateDocumentCategory(doc: DocumentEntity, category: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.setFolderCategory(doc.id, category)
+            if (_currentDocument.value?.id == doc.id) {
+                _currentDocument.value = _currentDocument.value?.copy(folderCategory = category)
+            }
         }
     }
 
     fun deleteDocument(doc: DocumentEntity) {
         viewModelScope.launch(Dispatchers.IO) {
+            dao.clearAllAnnotationsForDoc(doc.id)
             dao.deleteDocument(doc)
             try {
                 val f = File(doc.filePath)
                 if (f.exists() && !doc.isSample) {
                     f.delete()
                 }
-            } catch (ignored: Exception) {}
+            } catch (_: Exception) {}
         }
     }
 
-    // --- Annotation Actions ---
+    // --- Bookmarks ---
+    private fun observeBookmarksForDoc(docId: Long) {
+        bookmarksJob?.cancel()
+        bookmarksJob = viewModelScope.launch {
+            dao.getBookmarksForDoc(docId).collect { list ->
+                _currentBookmarks.value = list
+            }
+        }
+    }
+
+    fun addBookmark(pageIndex: Int, label: String) {
+        val doc = _currentDocument.value ?: return
+        val cleanLabel = label.trim().ifBlank { "Page ${pageIndex + 1}" }
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.insertBookmark(
+                BookmarkEntity(
+                    documentId = doc.id,
+                    pageIndex = pageIndex,
+                    label = cleanLabel
+                )
+            )
+            withContext(Dispatchers.Main) {
+                _statusMessage.value = "Bookmark added: $cleanLabel"
+            }
+        }
+    }
+
+    fun deleteBookmark(bookmarkId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.deleteBookmarkById(bookmarkId)
+        }
+    }
+
+    // --- Rename Active Document & Storage Sync ---
+    fun renameActiveDocument(
+        newName: String,
+        onResult: (StorageRenameCoordinator.RenameResult) -> Unit
+    ) {
+        val doc = _currentDocument.value ?: return
+        viewModelScope.launch {
+            val result = StorageRenameCoordinator.renameDocument(
+                context = getApplication(),
+                dao = dao,
+                doc = doc,
+                rawNewName = newName
+            )
+            if (result is StorageRenameCoordinator.RenameResult.Success) {
+                val updated = result.updatedDoc
+                _currentDocument.value = updated
+                // Re-bind PdfRendererManager cleanly to the renamed file without resetting page or annotations
+                withContext(Dispatchers.IO) {
+                    val file = File(updated.filePath)
+                    if (file.exists()) {
+                        rendererManager?.close()
+                        rendererManager = runCatching { PdfRendererManager(file) }.getOrNull()
+                        cachedLayoutFileKey = "${file.absolutePath}_${file.lastModified()}"
+                    }
+                }
+                _statusMessage.value = "Renamed to ${updated.title}.pdf"
+            }
+            onResult(result)
+        }
+    }
+
+    fun saveRenamedCopyToUri(
+        destinationUri: Uri,
+        onDone: (Boolean) -> Unit
+    ) {
+        val doc = _currentDocument.value ?: run {
+            onDone(false)
+            return
+        }
+        viewModelScope.launch {
+            val ok = StorageRenameCoordinator.saveCopyToDestinationUri(
+                context = getApplication(),
+                sourceFile = File(doc.filePath),
+                destinationUri = destinationUri
+            )
+            _statusMessage.value = if (ok) "Saved renamed copy to selected folder." else "Failed to write copy."
+            onDone(ok)
+        }
+    }
+
+    // --- Annotation Actions + Undo / Redo ---
     private fun loadAnnotationsForDoc(docId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             val list = dao.getAllAnnotationsForDoc(docId)
@@ -738,7 +939,9 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         posY: Float = 0f,
         width: Float = 0f,
         height: Float = 0f,
-        textContent: String = ""
+        textContent: String = "",
+        opacity: Float = _activeOpacity.value,
+        extraData: String = ""
     ) {
         val doc = _currentDocument.value ?: return
         val annotation = AnnotationEntity(
@@ -752,35 +955,123 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
             posY = posY,
             width = width,
             height = height,
-            textContent = textContent
+            textContent = textContent,
+            opacity = opacity,
+            extraData = extraData
         )
         viewModelScope.launch(Dispatchers.IO) {
             val id = dao.insertAnnotation(annotation)
-            val updated = _currentAnnotations.value + annotation.copy(id = id)
-            _currentAnnotations.value = updated
+            val saved = annotation.copy(id = id)
+            _currentAnnotations.value = _currentAnnotations.value + saved
+            undoStack.addLast(AnnotationAction.Added(saved))
+            redoStack.clear()
+            syncUndoRedoFlags()
         }
     }
 
     fun deleteAnnotation(annotationId: Long) {
+        val existing = _currentAnnotations.value.firstOrNull { it.id == annotationId }
         viewModelScope.launch(Dispatchers.IO) {
             dao.deleteAnnotationById(annotationId)
             _currentAnnotations.value = _currentAnnotations.value.filter { it.id != annotationId }
+            if (existing != null) {
+                undoStack.addLast(AnnotationAction.Deleted(existing))
+                redoStack.clear()
+                syncUndoRedoFlags()
+            }
         }
     }
 
     fun clearPageAnnotations(pageIndex: Int) {
         val doc = _currentDocument.value ?: return
+        val removed = _currentAnnotations.value.filter { it.pageIndex == pageIndex }
         viewModelScope.launch(Dispatchers.IO) {
             dao.clearPageAnnotations(doc.id, pageIndex)
             _currentAnnotations.value = _currentAnnotations.value.filter { it.pageIndex != pageIndex }
+            if (removed.isNotEmpty()) {
+                undoStack.addLast(AnnotationAction.ClearedPage(removed))
+                redoStack.clear()
+                syncUndoRedoFlags()
+            }
         }
     }
 
     fun updateAnnotation(annotation: AnnotationEntity) {
+        val previous = _currentAnnotations.value.firstOrNull { it.id == annotation.id }
         viewModelScope.launch(Dispatchers.IO) {
             dao.updateAnnotation(annotation)
-            val updated = _currentAnnotations.value.map { if (it.id == annotation.id) annotation else it }
-            _currentAnnotations.value = updated
+            _currentAnnotations.value = _currentAnnotations.value.map { if (it.id == annotation.id) annotation else it }
+            if (previous != null && previous != annotation) {
+                undoStack.addLast(AnnotationAction.Updated(previous, annotation))
+                redoStack.clear()
+                syncUndoRedoFlags()
+            }
+        }
+    }
+
+    fun undoLastAnnotation() {
+        val action = undoStack.removeLastOrNull() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            when (action) {
+                is AnnotationAction.Added -> {
+                    dao.deleteAnnotationById(action.annotation.id)
+                    _currentAnnotations.value = _currentAnnotations.value.filter { it.id != action.annotation.id }
+                }
+                is AnnotationAction.Deleted -> {
+                    val newId = dao.insertAnnotation(action.annotation.copy(id = 0))
+                    val restored = action.annotation.copy(id = newId)
+                    _currentAnnotations.value = _currentAnnotations.value + restored
+                }
+                is AnnotationAction.Updated -> {
+                    dao.updateAnnotation(action.previous)
+                    _currentAnnotations.value = _currentAnnotations.value.map {
+                        if (it.id == action.previous.id) action.previous else it
+                    }
+                }
+                is AnnotationAction.ClearedPage -> {
+                    val restoredList = action.removed.map { item ->
+                        val newId = dao.insertAnnotation(item.copy(id = 0))
+                        item.copy(id = newId)
+                    }
+                    _currentAnnotations.value = _currentAnnotations.value + restoredList
+                }
+            }
+            redoStack.addLast(action)
+            syncUndoRedoFlags()
+        }
+    }
+
+    fun redoLastAnnotation() {
+        val action = redoStack.removeLastOrNull() ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            when (action) {
+                is AnnotationAction.Added -> {
+                    val newId = dao.insertAnnotation(action.annotation.copy(id = 0))
+                    val restored = action.annotation.copy(id = newId)
+                    _currentAnnotations.value = _currentAnnotations.value + restored
+                    undoStack.addLast(AnnotationAction.Added(restored))
+                    syncUndoRedoFlags()
+                    return@launch
+                }
+                is AnnotationAction.Deleted -> {
+                    dao.deleteAnnotationById(action.annotation.id)
+                    _currentAnnotations.value = _currentAnnotations.value.filter { it.id != action.annotation.id }
+                }
+                is AnnotationAction.Updated -> {
+                    dao.updateAnnotation(action.updated)
+                    _currentAnnotations.value = _currentAnnotations.value.map {
+                        if (it.id == action.updated.id) action.updated else it
+                    }
+                }
+                is AnnotationAction.ClearedPage -> {
+                    action.removed.firstOrNull()?.let { sample ->
+                        dao.clearPageAnnotations(sample.documentId, sample.pageIndex)
+                        _currentAnnotations.value = _currentAnnotations.value.filter { it.pageIndex != sample.pageIndex }
+                    }
+                }
+            }
+            undoStack.addLast(action)
+            syncUndoRedoFlags()
         }
     }
 
@@ -791,57 +1082,62 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
         width: Float = 0.25f,
         height: Float = 0.04f,
         replacementText: String = "",
-        colorHex: Long = 0xFFFFFFFFL
+        colorHex: Long = 0xFFFFFFFFL,
+        isRedaction: Boolean = false
     ) {
-        val doc = _currentDocument.value ?: return
-        val annotation = AnnotationEntity(
-            documentId = doc.id,
+        addAnnotation(
             pageIndex = pageIndex,
-            type = "WHITEOUT",
+            type = if (isRedaction) "REDACT" else "WHITEOUT",
             posX = posX,
             posY = posY,
             width = width,
             height = height,
-            colorHex = colorHex,
+            colorHex = if (isRedaction) 0xFF000000L else colorHex,
             textContent = replacementText
         )
-        viewModelScope.launch(Dispatchers.IO) {
-            val id = dao.insertAnnotation(annotation)
-            _currentAnnotations.value = _currentAnnotations.value + annotation.copy(id = id)
-            withContext(Dispatchers.Main) {
-                _statusMessage.value = if (replacementText.isNotBlank()) "Text edited & replaced" else "Whiteout applied"
-            }
+        _statusMessage.value = when {
+            isRedaction -> "Redaction box marked (apply permanent sanitization to strip data)"
+            replacementText.isNotBlank() -> "Text edited & replaced"
+            else -> "Whiteout applied"
+        }
+    }
+
+    // --- 4-Option Share Rebuild ---
+    fun prepareShare(
+        option: ShareCoordinator.ShareOption,
+        customPdfName: String? = null,
+        onResult: (Result<ShareCoordinator.PreparedShare>) -> Unit
+    ) {
+        val doc = _currentDocument.value ?: return
+        viewModelScope.launch {
+            val res = ShareCoordinator.prepareShare(
+                context = getApplication(),
+                doc = doc,
+                option = option,
+                annotations = _currentAnnotations.value,
+                activeWatermark = _activeWatermark.value,
+                customPdfName = customPdfName
+            )
+            onResult(res)
         }
     }
 
     fun exportAnnotatedDocument(onExported: (File?) -> Unit) {
         val doc = _currentDocument.value ?: return
-        viewModelScope.launch(Dispatchers.IO) {
-            val source = File(doc.filePath)
-            val exportDir = File(getApplication<Application>().filesDir, "exported_pdfs")
-            if (!exportDir.exists()) exportDir.mkdirs()
-
-            val outFile = File(exportDir, "Edited_${System.currentTimeMillis()}_${source.name}")
-            var finalFile = outFile
-            val success = PdfExportEngine.exportAnnotatedPdf(source, _currentAnnotations.value, outFile)
-            val wm = _activeWatermark.value
-            if (success && wm != null) {
-                val watermarkedFile = File(exportDir, "WM_${System.currentTimeMillis()}_${source.name}")
-                val wmSuccess = DocumentConverterEngine.stampWatermarkOnPdf(outFile, watermarkedFile, wm)
-                if (wmSuccess) {
-                    outFile.delete()
-                    finalFile = watermarkedFile
-                }
-            }
-
-            withContext(Dispatchers.Main) {
-                if (success) {
-                    _statusMessage.value = "PDF exported successfully!"
-                    onExported(finalFile)
-                } else {
-                    _statusMessage.value = "Failed to export PDF"
-                    onExported(null)
-                }
+        viewModelScope.launch {
+            val res = ShareCoordinator.prepareShare(
+                context = getApplication(),
+                doc = doc,
+                option = ShareCoordinator.ShareOption.PDF_ORIGINAL_NAME,
+                annotations = _currentAnnotations.value,
+                activeWatermark = _activeWatermark.value
+            )
+            res.onSuccess { prepared ->
+                _statusMessage.value = "PDF ready: ${prepared.displayName}"
+                onExported(prepared.stagedFile)
+            }.onFailure {
+                _statusMessage.value = "Failed to export PDF"
+                onExported(null)
             }
         }
     }
@@ -1016,7 +1312,8 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
             val success = DocumentConverterEngine.convertPdfToTxt(
                 pdfFile = sourceFile,
                 outputTxtFile = outFile,
-                docTitle = cleanTitle
+                docTitle = cleanTitle,
+                context = context
             )
 
             withContext(Dispatchers.Main) {
@@ -1398,6 +1695,505 @@ class PdfViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.Main) {
                     _statusMessage.value = "Failed to extract pages"
                     onDone()
+                }
+            }
+        }
+    }
+
+    fun organizeDocumentPagesAdvanced(
+        doc: DocumentEntity,
+        slots: List<PdfExportEngine.PageSlotSpec>,
+        newTitle: String,
+        onDone: () -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val docsDir = File(context.filesDir, "organized_pdfs").apply { if (!exists()) mkdirs() }
+            val cleanTitle = StorageRenameCoordinator.sanitizeForStorageFileName(
+                newTitle,
+                fallback = "${doc.title}_organized"
+            )
+            val outFile = File(docsDir, "${cleanTitle}_${System.currentTimeMillis()}.pdf")
+            val success = PdfExportEngine.organizePagesAdvanced(
+                context = context,
+                sourceFile = File(doc.filePath),
+                slots = slots,
+                outputFile = outFile
+            )
+            if (success && outFile.exists() && outFile.length() > 0L) {
+                val pages = countPdfPagesSafely(outFile)
+                val newDoc = DocumentEntity(
+                    uriString = Uri.fromFile(outFile).toString(),
+                    title = cleanTitle,
+                    filePath = outFile.absolutePath,
+                    pageCount = pages,
+                    fileSizeBytes = outFile.length(),
+                    folderCategory = doc.folderCategory
+                )
+                val id = dao.insertDocument(newDoc)
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Updated document ($pages pages) saved!"
+                    openDocument(newDoc.copy(id = id))
+                    onDone()
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Failed to organize pages"
+                    onDone()
+                }
+            }
+        }
+    }
+
+    fun splitPdfDocument(
+        doc: DocumentEntity,
+        pageGroups: List<List<Int>>,
+        baseTitle: String,
+        onDone: (List<DocumentEntity>) -> Unit = {}
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val splitDir = File(context.filesDir, "split_pdfs").apply { if (!exists()) mkdirs() }
+            val createdFiles = PdfExportEngine.splitPdf(
+                context = context,
+                sourceFile = File(doc.filePath),
+                outputDir = splitDir,
+                baseTitle = baseTitle,
+                pageGroups = pageGroups
+            )
+            val createdDocs = mutableListOf<DocumentEntity>()
+            for (file in createdFiles) {
+                val pages = runCatching { countPdfPagesSafely(file) }.getOrDefault(1)
+                val newDoc = DocumentEntity(
+                    uriString = Uri.fromFile(file).toString(),
+                    title = file.nameWithoutExtension,
+                    filePath = file.absolutePath,
+                    pageCount = pages,
+                    fileSizeBytes = file.length(),
+                    folderCategory = doc.folderCategory
+                )
+                val id = dao.insertDocument(newDoc)
+                createdDocs.add(newDoc.copy(id = id))
+            }
+            withContext(Dispatchers.Main) {
+                _statusMessage.value = if (createdDocs.isNotEmpty()) {
+                    "Split into ${createdDocs.size} PDF files in your library!"
+                } else {
+                    "Unable to split PDF (verify page range or encryption)"
+                }
+                onDone(createdDocs)
+            }
+        }
+    }
+
+    fun detectDuplicatePages(
+        doc: DocumentEntity,
+        onResult: (List<PdfExportEngine.DuplicatePageMatch>) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val matches = PdfExportEngine.detectDuplicatePages(getApplication(), File(doc.filePath))
+            withContext(Dispatchers.Main) {
+                _statusMessage.value = if (matches.isEmpty()) {
+                    "No duplicate pages detected."
+                } else {
+                    "Found ${matches.size} likely duplicate page pair(s)."
+                }
+                onResult(matches)
+            }
+        }
+    }
+
+    fun batchRenameDocuments(
+        docs: List<DocumentEntity>,
+        prefix: String,
+        startNumber: Int = 1,
+        onDone: (Int, Int) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val cleanPrefix = StorageRenameCoordinator.sanitizeForStorageFileName(prefix, fallback = "Doc")
+            var succeeded = 0
+            var failed = 0
+            docs.forEachIndexed { index, doc ->
+                val num = (startNumber + index).toString().padStart(2, '0')
+                val targetName = "${cleanPrefix}_$num"
+                val result = StorageRenameCoordinator.renameDocument(
+                    context = getApplication(),
+                    dao = dao,
+                    doc = doc,
+                    rawNewName = targetName
+                )
+                if (result is StorageRenameCoordinator.RenameResult.Success) {
+                    succeeded++
+                    if (_currentDocument.value?.id == doc.id) {
+                        _currentDocument.value = result.updatedDoc
+                    }
+                } else {
+                    failed++
+                }
+            }
+            _statusMessage.value = if (failed == 0) {
+                "Renamed $succeeded document(s) cleanly."
+            } else {
+                "Renamed $succeeded document(s); $failed skipped/denied by storage."
+            }
+            onDone(succeeded, failed)
+        }
+    }
+
+    fun batchUpdateCategory(docs: List<DocumentEntity>, category: String) {
+        val cleanCategory = category.trim().ifBlank { "General" }
+        viewModelScope.launch(Dispatchers.IO) {
+            docs.forEach { dao.setFolderCategory(it.id, cleanCategory) }
+            withContext(Dispatchers.Main) {
+                _statusMessage.value = "Assigned ${docs.size} document(s) to $cleanCategory"
+            }
+        }
+    }
+
+    fun batchDeleteDocuments(docs: List<DocumentEntity>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            docs.forEach { doc ->
+                dao.clearAllAnnotationsForDoc(doc.id)
+                dao.deleteDocument(doc)
+                try {
+                    val f = File(doc.filePath)
+                    if (f.exists() && !doc.isSample) f.delete()
+                } catch (_: Exception) {}
+            }
+            withContext(Dispatchers.Main) {
+                _statusMessage.value = "Deleted ${docs.size} document(s)"
+            }
+        }
+    }
+
+    fun protectPdfWithPassword(
+        sourceFile: File,
+        baseTitle: String,
+        userPassword: String,
+        ownerPassword: String,
+        allowPrinting: Boolean,
+        allowCopying: Boolean,
+        keyLengthBits: Int,
+        onDone: (Result<DocumentEntity>) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val secDir = File(context.filesDir, "secured_pdfs").apply { if (!exists()) mkdirs() }
+            val cleanBase = StorageRenameCoordinator.sanitizeForStorageFileName(baseTitle, fallback = "Document")
+            var outFile = File(secDir, "${cleanBase}_protected.pdf")
+            var suffix = 1
+            while (outFile.exists()) {
+                outFile = File(secDir, "${cleanBase}_protected_$suffix.pdf")
+                suffix++
+            }
+            val res = PdfSecurityEngine.encryptPdf(
+                context = context,
+                sourceFile = sourceFile,
+                outputFile = outFile,
+                userPassword = userPassword,
+                ownerPassword = ownerPassword,
+                allowPrinting = allowPrinting,
+                allowCopying = allowCopying,
+                keyLengthBits = keyLengthBits
+            )
+            if (res.isSuccess) {
+                val pages = runCatching { countPdfPagesSafely(outFile) }.getOrDefault(0)
+                val newDoc = DocumentEntity(
+                    uriString = Uri.fromFile(outFile).toString(),
+                    title = outFile.nameWithoutExtension,
+                    filePath = outFile.absolutePath,
+                    pageCount = pages,
+                    fileSizeBytes = outFile.length(),
+                    lastOpenedTimestamp = System.currentTimeMillis()
+                )
+                val id = dao.insertDocument(newDoc)
+                val saved = newDoc.copy(id = id)
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "PDF encrypted (AES-$keyLengthBits) -> ${saved.title}.pdf"
+                    onDone(Result.success(saved))
+                }
+            } else {
+                val err = res.exceptionOrNull() ?: IllegalStateException("Encryption failed.")
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = err.localizedMessage ?: "Encryption failed."
+                    onDone(Result.failure(err))
+                }
+            }
+        }
+    }
+
+    fun unlockProtectedPdf(
+        sourceFile: File,
+        baseTitle: String,
+        password: String,
+        onDone: (Result<DocumentEntity>) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val secDir = File(context.filesDir, "secured_pdfs").apply { if (!exists()) mkdirs() }
+            val cleanBase = StorageRenameCoordinator.sanitizeForStorageFileName(baseTitle, fallback = "Document")
+            var outFile = File(secDir, "${cleanBase}_unlocked.pdf")
+            var suffix = 1
+            while (outFile.exists()) {
+                outFile = File(secDir, "${cleanBase}_unlocked_$suffix.pdf")
+                suffix++
+            }
+            val res = PdfSecurityEngine.decryptPdf(
+                context = context,
+                sourceFile = sourceFile,
+                password = password,
+                outputFile = outFile
+            )
+            if (res.isSuccess) {
+                val pages = runCatching { countPdfPagesSafely(outFile) }.getOrDefault(1)
+                val newDoc = DocumentEntity(
+                    uriString = Uri.fromFile(outFile).toString(),
+                    title = outFile.nameWithoutExtension,
+                    filePath = outFile.absolutePath,
+                    pageCount = pages,
+                    fileSizeBytes = outFile.length(),
+                    lastOpenedTimestamp = System.currentTimeMillis()
+                )
+                val id = dao.insertDocument(newDoc)
+                val saved = newDoc.copy(id = id)
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Unlocked PDF saved: ${saved.title}.pdf"
+                    onDone(Result.success(saved))
+                }
+            } else {
+                val err = res.exceptionOrNull() ?: IllegalStateException("Unlock failed.")
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = err.localizedMessage ?: "Unlock failed."
+                    onDone(Result.failure(err))
+                }
+            }
+        }
+    }
+
+    fun updatePdfMetadata(
+        doc: DocumentEntity?,
+        sourceFile: File,
+        title: String,
+        author: String,
+        subject: String,
+        keywords: String,
+        onDone: (Result<String>) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val outFile = if (doc != null) {
+                sourceFile
+            } else {
+                val dir = File(context.filesDir, "edited_metadata").apply { if (!exists()) mkdirs() }
+                File(dir, "${StorageRenameCoordinator.sanitizeForStorageFileName(title, "Document")}_meta.pdf")
+            }
+            val res = PdfSecurityEngine.updateMetadata(
+                context = context,
+                sourceFile = sourceFile,
+                outputFile = outFile,
+                title = title,
+                author = author,
+                subject = subject,
+                keywords = keywords
+            )
+            if (res.isSuccess) {
+                if (doc != null) {
+                    dao.updateDocumentMetadata(
+                        id = doc.id,
+                        author = author.trim(),
+                        subject = subject.trim(),
+                        keywords = keywords.trim(),
+                        fileSizeBytes = outFile.length()
+                    )
+                }
+                withContext(Dispatchers.Main) {
+                    val msg = "Updated PDF metadata on ${outFile.name}"
+                    _statusMessage.value = msg
+                    onDone(Result.success(msg))
+                }
+            } else {
+                val err = res.exceptionOrNull() ?: IllegalStateException("Metadata update failed.")
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = err.localizedMessage ?: "Metadata update failed."
+                    onDone(Result.failure(err))
+                }
+            }
+        }
+    }
+
+    fun batchCompressDocuments(
+        docs: List<DocumentEntity>,
+        preset: PdfCompressorEngine.CompressionPreset,
+        onProgress: (Int, Int) -> Unit,
+        onDone: (Int) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val outDir = File(context.filesDir, "compressed_pdfs").apply { if (!exists()) mkdirs() }
+            var succeeded = 0
+            docs.forEachIndexed { idx, doc ->
+                val res = PdfCompressorEngine.compressPdf(
+                    context = context,
+                    inputFile = File(doc.filePath),
+                    options = PdfCompressorEngine.CompressionOptions(preset = preset)
+                )
+                val produced = res.outputFile
+                if (res.isSuccess && produced != null && produced.exists()) {
+                    val dest = File(outDir, "${StorageRenameCoordinator.sanitizeForStorageFileName(doc.title)}_compressed_${System.currentTimeMillis()}.pdf")
+                    produced.copyTo(dest, overwrite = true)
+                    produced.delete()
+                    val newDoc = DocumentEntity(
+                        uriString = Uri.fromFile(dest).toString(),
+                        title = "${doc.title}_compressed",
+                        filePath = dest.absolutePath,
+                        pageCount = res.pageCount.coerceAtLeast(1),
+                        fileSizeBytes = dest.length(),
+                        folderCategory = doc.folderCategory
+                    )
+                    dao.insertDocument(newDoc)
+                    succeeded++
+                }
+                withContext(Dispatchers.Main) { onProgress(idx + 1, docs.size) }
+            }
+            withContext(Dispatchers.Main) {
+                _statusMessage.value = "Batch compressed $succeeded of ${docs.size} PDFs."
+                onDone(succeeded)
+            }
+        }
+    }
+
+    fun batchWatermarkDocuments(
+        docs: List<DocumentEntity>,
+        options: DocumentConverterEngine.WatermarkOptions,
+        onProgress: (Int, Int) -> Unit,
+        onDone: (Int) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val outDir = File(context.filesDir, "watermarked_pdfs").apply { if (!exists()) mkdirs() }
+            var succeeded = 0
+            docs.forEachIndexed { idx, doc ->
+                val dest = File(outDir, "${StorageRenameCoordinator.sanitizeForStorageFileName(doc.title)}_watermarked_${System.currentTimeMillis()}.pdf")
+                val ok = DocumentConverterEngine.stampWatermarkOnPdf(File(doc.filePath), dest, options)
+                if (ok && dest.exists() && dest.length() > 0L) {
+                    val pages = runCatching { countPdfPagesSafely(dest) }.getOrDefault(doc.pageCount)
+                    val newDoc = DocumentEntity(
+                        uriString = Uri.fromFile(dest).toString(),
+                        title = "${doc.title}_watermarked",
+                        filePath = dest.absolutePath,
+                        pageCount = pages,
+                        fileSizeBytes = dest.length(),
+                        folderCategory = doc.folderCategory
+                    )
+                    dao.insertDocument(newDoc)
+                    succeeded++
+                } else {
+                    dest.delete()
+                }
+                withContext(Dispatchers.Main) { onProgress(idx + 1, docs.size) }
+            }
+            withContext(Dispatchers.Main) {
+                _statusMessage.value = "Batch watermarked $succeeded of ${docs.size} PDFs."
+                onDone(succeeded)
+            }
+        }
+    }
+
+    fun applyPermanentRedaction(
+        doc: DocumentEntity,
+        overwriteOriginal: Boolean,
+        onResult: (PdfRedactionEngine.RedactionResult) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val sourceFile = File(doc.filePath)
+            val allAnnotations = dao.getAllAnnotationsForDoc(doc.id)
+            val targetOutFile = if (overwriteOriginal) {
+                File(context.cacheDir, "redact_overwrite_${doc.id}_${System.currentTimeMillis()}.pdf")
+            } else {
+                val redactedDir = File(context.filesDir, "redacted_pdfs").apply { if (!exists()) mkdirs() }
+                val base = StorageRenameCoordinator.sanitizeForStorageFileName(doc.title, fallback = "Document")
+                var candidate = File(redactedDir, "${base}_redacted.pdf")
+                var idx = 1
+                while (candidate.exists()) {
+                    candidate = File(redactedDir, "${base}_redacted_$idx.pdf")
+                    idx++
+                }
+                candidate
+            }
+
+            val result = PdfRedactionEngine.applyPermanentRedaction(
+                context = context,
+                sourceFile = sourceFile,
+                outputFile = targetOutFile,
+                annotations = allAnnotations
+            )
+
+            if (!result.success || !result.verifiedUnrecoverable) {
+                if (overwriteOriginal && targetOutFile.exists()) targetOutFile.delete()
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = result.errorMessage ?: "Permanent redaction verification failed."
+                    onResult(result)
+                }
+                return@launch
+            }
+
+            if (overwriteOriginal) {
+                try {
+                    rendererManager?.close()
+                    rendererManager = null
+                    targetOutFile.copyTo(sourceFile, overwrite = true)
+                    targetOutFile.delete()
+
+                    // Scrub metadata columns & remove applied REDACT boxes from Room DB
+                    allAnnotations.filter { it.type == "REDACT" }.forEach { dao.deleteAnnotationById(it.id) }
+                    val updatedDoc = doc.copy(
+                        fileSizeBytes = sourceFile.length(),
+                        lastOpenedTimestamp = System.currentTimeMillis(),
+                        author = "",
+                        subject = "",
+                        keywords = ""
+                    )
+                    dao.updateDocument(updatedDoc)
+                    cachedExtractedPath = null
+                    cachedLayoutFileKey = ""
+                    pageLayoutCache.clear()
+
+                    withContext(Dispatchers.Main) {
+                        _statusMessage.value = "Permanent redaction verified & applied (${result.boxesApplied} box(es))."
+                        openDocument(updatedDoc)
+                        onResult(result.copy(outputFile = sourceFile))
+                    }
+                } catch (e: Exception) {
+                    targetOutFile.delete()
+                    withContext(Dispatchers.Main) {
+                        val err = result.copy(
+                            success = false,
+                            verifiedUnrecoverable = false,
+                            errorMessage = e.localizedMessage ?: "Failed to overwrite original PDF."
+                        )
+                        _statusMessage.value = err.errorMessage
+                        onResult(err)
+                    }
+                }
+            } else {
+                val pages = runCatching { countPdfPagesSafely(targetOutFile) }.getOrDefault(doc.pageCount)
+                val cleanTitle = targetOutFile.nameWithoutExtension
+                val newDoc = DocumentEntity(
+                    uriString = Uri.fromFile(targetOutFile).toString(),
+                    title = cleanTitle,
+                    filePath = targetOutFile.absolutePath,
+                    pageCount = pages,
+                    fileSizeBytes = targetOutFile.length(),
+                    lastOpenedTimestamp = System.currentTimeMillis(),
+                    folderCategory = doc.folderCategory
+                )
+                val newId = dao.insertDocument(newDoc)
+                val savedDoc = newDoc.copy(id = newId)
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Verified sanitized copy saved: $cleanTitle.pdf"
+                    openDocument(savedDoc)
+                    onResult(result)
                 }
             }
         }

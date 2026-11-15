@@ -44,7 +44,7 @@ class PdfRendererManager(val file: File) {
             try { fileDescriptor?.close() } catch (ignored: Exception) {}
             pdfRenderer = null
             fileDescriptor = null
-            Log.e("PdfRendererManager", "Error opening PDF file: ${file.path}", e)
+            Log.e("PdfRendererManager", "Error opening PDF document", e)
             throw e
         }
     }

@@ -164,9 +164,8 @@ object UpdateManager {
                     htmlUrl = htmlUrl
                 )
 
-                // Post system shade notification & schedule periodic background alarm
+                // Post system shade notification only for this user-initiated check (no recurring background alarm)
                 UpdateNotificationHelper.showUpdateNotification(context, releaseInfo)
-                UpdateCheckAlarmReceiver.scheduleNextAlarm(context)
 
                 Result.success(releaseInfo)
             } else {
@@ -284,7 +283,7 @@ object UpdateManager {
             // Rename temp to target final APK
             if (tempFile.renameTo(finalFile)) {
                 onProgress(100, bytesReadTotal, totalBytes, lastSpeedKbps)
-                Log.d(TAG, "Download finished! Final APK: ${finalFile.absolutePath} (${finalFile.length()} bytes)")
+                Log.d(TAG, "Download finished (${finalFile.length()} bytes)")
                 Result.success(finalFile)
             } else {
                 tempFile.copyTo(finalFile, overwrite = true)
@@ -310,7 +309,7 @@ object UpdateManager {
     fun launchInstaller(context: Context, apkFile: File): Boolean {
         try {
             if (!apkFile.exists() || apkFile.length() == 0L) {
-                Log.e(TAG, "APK file does not exist or is empty: ${apkFile.absolutePath}")
+                Log.e(TAG, "APK file does not exist or is empty")
                 return false
             }
 
@@ -360,7 +359,7 @@ object UpdateManager {
                 val files = updatesDir.listFiles() ?: emptyArray()
                 for (file in files) {
                     val deleted = file.delete()
-                    Log.d(TAG, "Cleaned update file ${file.name}: $deleted")
+                    Log.d(TAG, "Cleaned cached update artifact: $deleted")
                 }
                 updatesDir.delete()
             }

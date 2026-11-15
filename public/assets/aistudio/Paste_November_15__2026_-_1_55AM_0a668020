@@ -1,0 +1,1041 @@
+PDF (AIO) — COMPLETE v5.3.0 MASTER DEVELOPMENT, PRIVACY, SECURITY & LEGAL OVERHAUL
+
+ROLE
+
+Act as a senior Android engineer, Kotlin developer, Android security specialist, PDF processing engineer, UI/UX designer, privacy documentation specialist and technical documentation writer.
+
+You are responsible for auditing, improving, testing and preparing the complete PDF (AIO) Android application for its v5.3.0 release.
+
+This is a real application upgrade, not a demonstration project. Work with the actual repository, preserve existing functionality and produce working, verifiable improvements.
+
+PROJECT INFORMATION
+
+- Application: PDF (AIO) / ADF AIO
+- Developer and copyright holder: Ishant Kohli
+- Contact: ishantkohlikohli@gmail.com
+- Website: https://ishantkohli.me
+- GitHub: https://github.com/Ishantkohli/PDF-AIO
+- Current uploaded source: PDF-AIO-main(2).zip
+- Version identified in the uploaded source: 5.1.6
+- Target release: 5.3.0
+- Target versionCode: 530, but verify the actual existing version sequence before changing it.
+
+The uploaded ZIP is the source of truth. Do not rely on previous implementation plans or assumed architecture when the actual code differs.
+
+PART 1 — NON-NEGOTIABLE PRIVACY REQUIREMENTS
+
+PDF (AIO) must remain a local-first document processing application.
+
+These requirements are mandatory:
+
+1. All PDF and document processing must happen locally on the user's Android device.
+2. Do not introduce AI or ML features.
+3. Do not introduce offline ML models either.
+4. Do not add AI APIs, cloud APIs or external document-processing services.
+5. Do not upload documents, images, extracted text or document metadata to external servers.
+6. Do not introduce cloud storage, cloud synchronization or cloud document backups.
+7. Do not add Firebase, Supabase, analytics, advertising trackers or tracking SDKs.
+8. Do not introduce external OCR services.
+9. Do not transmit private document information through logs, crash reports, feedback forms or network requests.
+10. Do not make any document-processing feature dependent on internet access.
+
+Prefer traditional Android APIs, Kotlin, deterministic algorithms, established local PDF libraries and classical image processing.
+
+Existing network functionality
+
+Audit all existing network functionality before modifying it.
+
+Specifically investigate:
+
+- FeedbackDispatcher.kt
+- FeedbackFormCard.kt
+- UpdateManager.kt
+- Web3Forms
+- ShipMyForm
+- GitHub Releases API
+- Background update scheduling
+- Every other network endpoint or HTTP client.
+
+Remove automatic remote feedback submissions and replace them with an optional user-initiated email/share workflow where appropriate.
+
+Remove unnecessary automatic background network activity.
+
+Do not silently retain an integration that contradicts the local-first privacy requirement.
+
+If a user explicitly opens an external website or chooses to contact the developer, make that action transparent. Never transmit documents or private app information.
+
+Ensure the Privacy Policy accurately describes any remaining user-initiated external connections.
+
+PART 2 — COMPLETE REPOSITORY AUDIT
+
+Before implementation, inspect the entire repository.
+
+Audit:
+
+- Project structure.
+- Kotlin and Java source files.
+- Activities, Fragments and Compose screens.
+- ViewModels and repositories.
+- Gradle configuration and dependencies.
+- AndroidManifest.xml.
+- Room database and entities.
+- Database migrations.
+- SharedPreferences and DataStore.
+- File storage and URI handling.
+- FileProvider configuration.
+- PDF rendering and editing engines.
+- Scanner and image processing.
+- Feedback implementation.
+- Update implementation.
+- All existing PDF tools.
+- Settings and themes.
+- Legal documents.
+- README and LICENSE.
+- Existing tests.
+
+Create a feature inventory classifying each feature as:
+
+- Fully implemented.
+- Partially implemented.
+- Broken.
+- Missing.
+- Needs optimization.
+
+Do not duplicate existing functionality.
+
+Do not rewrite working architecture unnecessarily.
+
+Do not assume that files, classes, database versions, permissions or dependencies described in an earlier plan actually exist.
+
+Preserve the existing application ID, namespace, user data, SharedPreferences keys and working functionality.
+
+PART 3 — PDF READER IMPROVEMENTS
+
+3.1 Native text selection and copying
+
+Implement proper selectable PDF text.
+
+Requirements:
+
+- Long-press on text.
+- Select individual words.
+- Select characters where supported.
+- Select sentences and paragraphs.
+- Select across multiple lines.
+- Draggable selection handles.
+- Copy selected text.
+- Select All.
+- Share selected text.
+- Search selected text.
+- Accurate text-selection highlighting.
+- Correct coordinate transformation under zoom.
+- Correct behavior while scrolling.
+- Correct behavior with rotated pages.
+- Correct behavior with CropBox and MediaBox.
+- Support multi-column layouts as reliably as possible.
+
+Prefer native PDF text extraction and actual glyph geometry.
+
+If PDFBox-Android is suitable, investigate its compatibility with the actual Android project before integration.
+
+Do not implement inaccurate selection rectangles using approximate character widths.
+
+For image-only scanned PDFs, show an honest notice that native selectable text is unavailable.
+
+Do not add ML OCR to enable selection.
+
+Do not claim scanned-PDF text selection works unless a permitted existing non-ML implementation genuinely supports it.
+
+3.2 Reader header filename menu
+
+Make the filename displayed at the top center of the PDF Reader clickable.
+
+On tapping it, show exactly two primary menu options:
+
+1. Rename File
+2. Close
+
+Close must dismiss the menu only. It must not close the PDF Reader.
+
+3.3 Actual storage file renaming
+
+Implement real file renaming.
+
+Support, where possible:
+
+- Filesystem files.
+- Storage Access Framework using DocumentsContract.renameDocument.
+- MediaStore through the appropriate ContentResolver operations.
+
+Requirements:
+
+- Display the current filename.
+- Allow editing the base filename.
+- Automatically preserve the .pdf extension.
+- Reject empty names.
+- Validate illegal characters.
+- Detect filename collisions.
+- Provide Cancel and Rename actions.
+- Preserve access permissions and URI references.
+- Update Room records and related local references.
+- Update Reader title.
+- Update Recent files.
+- Update Favorites and Pinned files.
+- Preserve bookmarks and annotations.
+- Update subsequent sharing filenames.
+
+Never delete the original file before verifying the renamed destination.
+
+Use safe, recoverable operations.
+
+If a storage provider does not support renaming or denies permission, explain the failure and offer Save Copy As where appropriate.
+
+Never claim the underlying file was renamed if only the UI title changed.
+
+PART 4 — SHARING IMPROVEMENTS
+
+Fix the bug where a user-facing PDF filename such as Document.pdf becomes editingDocument.pdf, Edited_timestamp_Document.pdf or another internal working filename.
+
+Investigate:
+
+- FileProvider.
+- Intent.ACTION_SEND.
+- EXTRA_STREAM.
+- ClipData.
+- ContentResolver.
+- MIME types.
+- Content URIs.
+- URI permission flags.
+- Temporary export files.
+- Internal working filenames.
+- Modified and unmodified document handling.
+
+Implement a dedicated ShareCoordinator.
+
+Keep these concepts separate:
+
+- Original source URI.
+- Current user-visible filename.
+- Internal working filename.
+- Temporary export filename.
+
+Provide a clean sharing interface:
+
+1. Share as PDF (Original Filename).
+2. Share as TXT, if genuine local text extraction is supported.
+3. Share as DOCX, if genuine local DOCX generation is supported.
+4. Share as PDF (Custom Filename).
+
+Requirements:
+
+- Preserve the expected filename.
+- Use valid content:// URIs.
+- Use application/pdf for PDF.
+- Use correct MIME types for other formats.
+- Provide read permissions.
+- Include ClipData where required.
+- Clean up temporary exports safely.
+- Share the correct saved/edited document state.
+
+DOCX must be a genuine valid DOCX file, not a renamed TXT or fake DOC file.
+
+Do not promise perfect formatting preservation when exporting between formats.
+
+Test sharing with available receiving applications such as WhatsApp, Gmail, Bluetooth and Nearby Share.
+
+Distinguish the filename supplied by PDF (AIO) from any subsequent filename modification performed by the receiving application.
+
+PART 5 — ADVANCED PDF ORGANIZER
+
+Implement or improve:
+
+- Page thumbnails.
+- Drag-and-drop page reordering.
+- Multi-page selection.
+- Batch page deletion.
+- Page rotation.
+- Duplicate pages.
+- Extract pages.
+- Split PDFs.
+- Merge PDFs.
+- Replace pages.
+- Duplicate-page detection.
+- Page selection and preview.
+
+Preserve document integrity.
+
+Do not overwrite original files without a safe replacement or export process.
+
+PART 6 — PERMANENT PDF REDACTION
+
+Implement genuine permanent redaction.
+
+A black rectangle placed over content is not permanent redaction.
+
+The implementation must investigate and sanitize:
+
+- Original text streams.
+- Underlying graphics.
+- Images where relevant.
+- Hidden objects.
+- Metadata.
+- Searchable content.
+- Other recoverable content.
+
+Use a safe sanitized-document reconstruction approach where necessary.
+
+Verify the result using text extraction and document inspection.
+
+Explain trade-offs such as:
+
+- Loss of selectable text.
+- Rasterization.
+- Reduced vector quality.
+- Removed links or forms.
+
+Keep the original document intact until the sanitized output is successfully generated and verified.
+
+Never advertise redaction as secure unless it has been tested.
+
+PART 7 — BUILT-IN DOCUMENT SCANNER
+
+Build an in-app CameraX scanner.
+
+Do not rely on launching a manufacturer's external camera application.
+
+Requirements:
+
+- Live CameraX preview.
+- Camera permission handling.
+- Torch and flash control.
+- Manual capture.
+- Automatic capture when detection is stable.
+- Classical four-corner detection.
+- Document boundary overlay.
+- Perspective correction.
+- Four-corner manual adjustment.
+- Image cropping.
+- Shadow reduction.
+- Contrast adjustment.
+- Grayscale.
+- Black-and-white conversion.
+- Multi-page scanning.
+- Batch PDF creation.
+- Gallery import through Android Photo Picker.
+
+Use classical computer vision techniques such as:
+
+- Sobel edge detection.
+- Contour detection.
+- Thresholding.
+- Perspective transformation.
+- Matrix.setPolyToPoly.
+
+Do not introduce ML Kit or any other ML-based detection model.
+
+Provide a manual crop fallback when automatic detection fails.
+
+Handle Android lifecycle, permissions, camera rotation and memory correctly.
+
+PART 8 — PDF COMPARISON 2.0
+
+Improve PDF comparison with:
+
+- Side-by-side comparison.
+- Text-based comparison.
+- Visual comparison.
+- Added pages.
+- Removed pages.
+- Changed page detection.
+- Highlighted differences.
+- Navigation between changes.
+- Local comparison reports.
+
+Use deterministic algorithms such as normalized text comparison, Myers diff and image comparison.
+
+Do not use cloud comparison services.
+
+PART 9 — ANNOTATIONS AND DOCUMENT LIBRARY
+
+Advanced annotations
+
+Implement or improve:
+
+- Highlight.
+- Underline.
+- Strikethrough.
+- Freehand drawing.
+- Text notes.
+- Sticky notes.
+- Annotation colors.
+- Undo.
+- Redo.
+- Persistence.
+- Correct page coordinates.
+- Correct behavior after zoom and rotation.
+
+Preserve existing signatures and annotations.
+
+Local document library
+
+Implement or improve:
+
+- Recent documents.
+- Favorites.
+- Pinned documents.
+- Local document search.
+- Folders and categories.
+- Sorting.
+- Filtering.
+- File size.
+- Page count.
+- Last-opened information.
+
+All library operations must remain local.
+
+PART 10 — ADDITIONAL PDF UTILITIES
+
+Audit existing tools before adding anything.
+
+Improve or add where feasible:
+
+- Image to PDF.
+- PDF compression.
+- Image extraction.
+- Text extraction.
+- Page extraction.
+- Page replacement.
+- PDF metadata editing.
+- Watermarks.
+- Bookmark management.
+- Form filling.
+- Password protection.
+- Password removal with appropriate authorization.
+- Batch processing.
+- Local file renaming.
+
+Use mature compatible encryption libraries.
+
+Do not implement custom cryptographic algorithms.
+
+Never claim password protection or encryption is secure without verification.
+
+PART 11 — UI/UX OVERHAUL
+
+Improve the complete application while preserving its identity.
+
+Maintain existing themes and visual features, including:
+
+- Midnight Dark.
+- Light.
+- Liquid Glass.
+- Frosted Crystal.
+
+Use the existing Material 3 design system.
+
+Review:
+
+- Home dashboard.
+- PDF Reader.
+- Tool navigation.
+- Scanner.
+- Organizer.
+- Comparison.
+- Settings.
+- Dialogs.
+- Bottom sheets.
+- Loading states.
+- Error states.
+- Empty states.
+- Typography.
+- Icons.
+- Spacing.
+- Animations.
+- Touch targets.
+- Accessibility.
+- Responsive layouts.
+
+Use consistent colors, typography and component styling.
+
+Do not redesign working screens without a clear usability improvement.
+
+PART 12 — PERFORMANCE AND STABILITY
+
+Audit:
+
+- PDF rendering.
+- Bitmap memory usage.
+- Thumbnail caching.
+- Lazy rendering.
+- Large PDF handling.
+- Background processing.
+- Coroutines.
+- Lifecycle management.
+- Temporary file cleanup.
+- Memory leaks.
+- Battery consumption.
+- UI responsiveness.
+
+Improve performance without compromising document accuracy.
+
+Test with small, medium and large PDFs.
+
+Handle malformed, password-protected and corrupted documents gracefully.
+
+PART 13 — LEGAL DOCUMENTATION OVERHAUL
+
+Audit the entire ADF-AIO-Policies directory and the root README and LICENSE.
+
+Rewrite all legal documents professionally.
+
+The writing must be clear, formal, consistent, appropriately strict and legally qualified.
+
+Never invent business details, legal entities, certifications, data practices or legal rights.
+
+Use TODO markers for information requiring developer confirmation.
+
+13.1 Privacy Policy
+
+Rewrite 01-PRIVACY-POLICY.md.
+
+Include:
+
+1. Introduction and operator identity.
+2. Information the application handles.
+3. Local document processing.
+4. Local database and preference storage.
+5. Feedback collection and processing.
+6. Network activity, if any remains.
+7. Third-party providers.
+8. Android permissions.
+9. Storage and backup.
+10. Retention and deletion.
+11. Security safeguards and limitations.
+12. Children's privacy.
+13. Applicable user privacy rights.
+14. Policy changes.
+15. Contact details.
+
+Never claim database encryption unless it is actually implemented and verified.
+
+Never claim that absolutely no information leaves the device if any external connection remains.
+
+13.2 Terms and Conditions
+
+Rewrite 02-TERMS-AND-CONDITIONS.md.
+
+Include:
+
+- Acceptance of terms.
+- Eligibility.
+- Permitted use.
+- Prohibited activities.
+- Copyright and intellectual property.
+- User responsibility for documents.
+- Document integrity and conversion limitations.
+- Signatures and document authenticity.
+- Encryption and password limitations.
+- External links.
+- Updates and compatibility.
+- Suspension and termination.
+- Warranty disclaimers.
+- Limitation of liability subject to mandatory law.
+- Governing law.
+- Dispute resolution.
+- Contact information.
+
+Do not use aggressive or unfair language.
+
+Do not attempt to remove mandatory statutory or consumer rights.
+
+Do not invent a registered company or business address.
+
+13.3 Cookie Policy
+
+Rewrite 03-COOKIE-POLICY.md.
+
+Clearly distinguish:
+
+- Browser cookies.
+- Website local storage.
+- Android SharedPreferences.
+- Android databases.
+- Temporary application files.
+
+Do not describe Android local storage as browser cookies.
+
+Do not claim the website has zero cookies unless its actual behavior has been inspected.
+
+13.4 Cookie and Form Consent
+
+Rewrite 04-COOKIE-AND-FORM-CONSENT.md.
+
+Distinguish website cookie consent from Android feedback consent.
+
+Do not claim a consent system exists unless implemented.
+
+13.5 Data Retention and Deletion
+
+Create 05-DATA-RETENTION-AND-DELETION.md.
+
+Explain actual handling of:
+
+- Local documents.
+- Temporary files.
+- Exported files.
+- Feedback drafts.
+- Cached information.
+- Application data deletion.
+- Backup behavior.
+
+Do not invent retention periods.
+
+13.6 Third-Party Services
+
+Rewrite 06-THIRD-PARTY-EMBEDS.md.
+
+Inventory actual third-party integrations.
+
+Investigate Web3Forms, ShipMyForm, GitHub and every other external service.
+
+If integrations are removed, update the document accordingly.
+
+Do not claim that a provider receives data unless the actual implementation supports that claim.
+
+13.7 Proprietary License
+
+Reconcile root LICENSE and 07-PROPRIETARY-LICENSE.md.
+
+Make the root LICENSE the authoritative proprietary license.
+
+The policy-folder file should refer to the root license and explain it.
+
+Include:
+
+- Copyright ownership.
+- Personal application usage.
+- Source-code restrictions.
+- Unauthorized redistribution.
+- Commercial use.
+- Derivative applications.
+- Written permission.
+- Third-party license exceptions.
+- Applicable statutory exceptions.
+
+Do not claim ownership of third-party libraries, fonts, images, icons or assets.
+
+Do not claim that public GitHub repository visibility prevents people from viewing or forking code.
+
+13.8 Acceptable Use Policy
+
+Rewrite 08-ACCEPTABLE-USE-POLICY.md.
+
+Include restrictions on:
+
+- Unauthorized document processing.
+- Forgery.
+- Fraud.
+- Copyright infringement.
+- Malicious document distribution.
+- Unauthorized security circumvention.
+- Impersonation.
+- Harassment.
+- Unlawful activities.
+
+Keep the language proportionate and subject to applicable law.
+
+13.9 Security and Vulnerability Disclosure
+
+Create 09-SECURITY-AND-VULNERABILITY-DISCLOSURE.md.
+
+Include:
+
+- Security reporting contact.
+- Responsible disclosure expectations.
+- What information to include in a report.
+- Safe reporting procedures.
+- Developer response expectations, without inventing guaranteed response times.
+- Handling of security reports.
+
+Do not claim an established bug bounty or security certification unless one exists.
+
+13.10 Accessibility and Disclaimer
+
+Rewrite 10-ACCESSIBILITY-AND-DISCLAIMER.md.
+
+Include:
+
+- Accessibility statement.
+- Known accessibility limitations.
+- General application disclaimer.
+- PDF conversion limitations.
+- Document integrity disclaimer.
+- Password protection disclaimer.
+- External services disclaimer.
+- Compatibility and availability disclaimer.
+
+Do not claim WCAG compliance without an assessment.
+
+13.11 Legal consistency
+
+All documents must use consistent product and developer naming.
+
+Use:
+
+- PDF (AIO) as the product name.
+- Ishant Kohli as developer/copyright holder.
+- ishantkohlikohli@gmail.com as the contact address.
+
+Include effective date and last-updated date.
+
+Ensure that every legal statement matches actual application behavior.
+
+The documents must not promise features or protections that do not exist.
+
+PART 14 — IN-APP LEGAL & PRIVACY CENTER
+
+Create a polished Legal & Privacy section inside Settings.
+
+Provide access to:
+
+- Privacy Policy.
+- Terms and Conditions.
+- Cookie Policy.
+- Cookie and Form Consent.
+- Data Retention and Deletion.
+- Third-Party Services.
+- Proprietary License.
+- Acceptable Use Policy.
+- Security Disclosure.
+- Accessibility and Disclaimer.
+
+Requirements:
+
+- Professional reading layout.
+- Clear section headings.
+- Readable typography.
+- Effective date.
+- Last-updated date.
+- Copy and share options.
+- Contact links.
+- Correct theme support.
+- Smooth scrolling.
+- Accessible navigation.
+
+Do not force users to repeatedly accept unchanged policies.
+
+Use versioned acceptance only when necessary and legally appropriate.
+
+PART 15 — FEEDBACK SYSTEM PRIVACY AND CORRECTNESS
+
+Audit FeedbackDispatcher.kt and FeedbackFormCard.kt.
+
+The current implementation must be checked for the possibility that a failed submission is still displayed as successful because the submission state is changed inside a finally block.
+
+Correct this behavior.
+
+If remote submission is removed:
+
+- Replace it with a user-initiated email/share workflow.
+- Preserve useful feedback functionality.
+- Provide clear success and failure states.
+- Allow users to edit or delete locally saved drafts.
+
+If any remote submission remains, it must be explicitly user-initiated, accurately disclosed and must never transmit document content.
+
+Never falsely report a successful submission.
+
+PART 16 — ANDROID PERMISSION AND SECURITY AUDIT
+
+Review every permission in AndroidManifest.xml.
+
+Investigate:
+
+- INTERNET.
+- CAMERA.
+- READ_EXTERNAL_STORAGE.
+- WRITE_EXTERNAL_STORAGE.
+- MANAGE_EXTERNAL_STORAGE.
+- REQUEST_INSTALL_PACKAGES.
+- POST_NOTIFICATIONS.
+- RECEIVE_BOOT_COMPLETED.
+- SCHEDULE_EXACT_ALARM.
+- Other declared permissions.
+
+Remove permissions that are genuinely unnecessary.
+
+Prefer:
+
+- Storage Access Framework.
+- Android Photo Picker.
+- Scoped storage.
+- Content URIs.
+- Least-privilege access.
+
+Do not break existing functionality while removing permissions.
+
+Review:
+
+- FileProvider paths.
+- URI grants.
+- Temporary file handling.
+- External intents.
+- Local database protection.
+- Logging.
+- Backup configuration.
+- Update APK integrity.
+
+Never log private document contents.
+
+PART 17 — DATABASE AND VERSION SAFETY
+
+Inspect the actual Room schema and migration history.
+
+Do not assume Room v1.
+
+Do not create a migration merely because an earlier plan mentioned one.
+
+Remove destructive migrations only after examining actual behavior and adding appropriate safe migrations.
+
+Preserve:
+
+- Documents.
+- Signatures.
+- Annotations.
+- Bookmarks.
+- Favorites.
+- History.
+- Settings.
+- User preferences.
+
+Test migration using a genuine database fixture matching the actual previous schema.
+
+Only set versionName to 5.3.0 and versionCode to 530 after checking the current version sequence.
+
+Preserve applicationId and namespace.
+
+PART 18 — IMPLEMENTATION ORDER
+
+Work in controlled phases.
+
+Phase 1: Repository audit
+
+Inspect the complete project and create the feature inventory.
+
+Phase 2: Reader and file handling
+
+Implement text selection, sharing fixes and real file renaming.
+
+Phase 3: PDF utilities
+
+Improve organizer, annotations and local document library.
+
+Phase 4: Advanced processing
+
+Implement permanent redaction and comparison improvements.
+
+Phase 5: Scanner
+
+Implement CameraX scanner and classical image processing.
+
+Phase 6: UI and performance
+
+Improve navigation, themes, memory and rendering.
+
+Phase 7: Privacy and security
+
+Audit permissions, network integrations, feedback handling, local storage and security.
+
+Phase 8: Legal documentation
+
+Rewrite all legal documents and update README and LICENSE.
+
+Phase 9: In-app Legal & Privacy Center
+
+Integrate the legal documents into the application.
+
+Phase 10: Final verification
+
+Run regression tests, build checks, migration checks and offline tests.
+
+Build and test after every phase.
+
+Fix regressions before continuing.
+
+If a feature cannot be implemented safely or the scope exceeds the available environment, report it honestly instead of delivering fake functionality.
+
+PART 19 — TESTING REQUIREMENTS
+
+Test all features where the environment permits.
+
+Reader
+
+- Word selection.
+- Sentence selection.
+- Multi-line selection.
+- Clipboard.
+- Zoom.
+- Scrolling.
+- Rotation.
+- Image-only PDFs.
+
+Sharing
+
+- Correct filename.
+- Correct MIME type.
+- URI permissions.
+- Modified PDFs.
+- Unmodified PDFs.
+- TXT export.
+- DOCX export.
+- Custom filename.
+- Temporary file cleanup.
+
+Renaming
+
+- Filesystem.
+- SAF.
+- MediaStore.
+- Permission denial.
+- Collision.
+- Invalid names.
+- Cancellation.
+- Database synchronization.
+- Reopening renamed documents.
+- Subsequent sharing.
+
+Redaction
+
+- Text extraction.
+- Image extraction.
+- Hidden content.
+- Metadata.
+- Output integrity.
+
+Scanner
+
+- Camera permissions.
+- Rotation.
+- Manual capture.
+- Automatic detection.
+- Manual crop.
+- Multi-page export.
+- Gallery import.
+
+Legal and privacy
+
+- Correct document links.
+- Correct dates and versions.
+- No contradictory claims.
+- No accidental document transmission.
+- No automatic feedback transmission.
+- No hidden analytics.
+- No unnecessary network requests.
+
+General
+
+- Database migration.
+- Large documents.
+- Corrupted documents.
+- Password-protected documents.
+- Invalid inputs.
+- Offline operation.
+- Theme compatibility.
+- Accessibility.
+- Build and installation.
+
+Clearly distinguish automated tests, emulator tests and physical-device tests.
+
+Never claim tests that were not actually run.
+
+PART 20 — FINAL DELIVERABLES
+
+At completion, produce a detailed engineering report.
+
+Include:
+
+1. Executive summary.
+2. Original repository audit.
+3. Feature inventory.
+4. Features newly implemented.
+5. Existing features improved.
+6. Bugs fixed and their root causes.
+7. PDF Reader improvements.
+8. Text-selection implementation.
+9. Sharing filename bug and resolution.
+10. Actual file-renaming implementation.
+11. Redaction implementation and verification.
+12. Scanner implementation.
+13. Comparison and organizer improvements.
+14. Legal documentation changes.
+15. Privacy and security improvements.
+16. Permission changes.
+17. Network integrations removed or retained.
+18. Database migration details.
+19. Dependencies added, removed or updated.
+20. Files created, modified and deleted.
+21. Tests actually performed.
+22. Build result.
+23. Offline verification.
+24. Known limitations.
+25. Remaining work.
+
+PART 21 — PROFESSIONAL GITHUB RELEASE NOTES
+
+Create professional GitHub release notes for PDF (AIO) v5.3.0.
+
+Include:
+
+- Release title.
+- Version.
+- Highlights.
+- New features.
+- PDF Reader improvements.
+- Sharing and renaming fixes.
+- Scanner improvements.
+- PDF utilities.
+- Privacy and security improvements.
+- Legal documentation improvements.
+- Performance improvements.
+- Bug fixes.
+- Testing and compatibility.
+- Known limitations.
+
+Only include features that have actually been implemented and verified.
+
+Do not advertise unfinished features.
+
+Do not fabricate benchmarks or test results.
+
+PART 22 — GIT AND RELEASE SAFETY
+
+Work on a separate development branch if a Git repository exists.
+
+If there is no Git repository, report this and create a safe backup before significant changes.
+
+Never overwrite or delete user work unnecessarily.
+
+Do not:
+
+- Push to main.
+- Publish a GitHub release.
+- Upload an APK.
+- Publish legal documents externally.
+- Change repository visibility.
+- Make irreversible changes.
+
+without explicit authorization.
+
+FINAL INSTRUCTION
+
+Your goal is not to make the largest possible number of changes.
+
+Your goal is to deliver a genuinely better, more stable, secure, professional and privacy-respecting PDF (AIO) application.
+
+Correctness, user-data preservation, local processing, legal accuracy and working features take priority over feature quantity.
+
+Audit first. Plan second. Implement third. Test continuously. Document honestly.
+
+Do not stop after writing a plan. Proceed with implementation phase by phase, subject to the available environment and repository access.
+
+At the end, clearly report what is completed, what is partially completed, what is not completed and what requires developer decisions.

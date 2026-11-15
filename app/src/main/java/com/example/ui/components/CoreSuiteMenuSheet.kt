@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import com.example.data.fps.DisplayRefreshRateManager
@@ -235,7 +236,7 @@ fun CoreSuiteMenuSheet(
                         icon = { AdfIcon.DeveloperBadge(size = 24.dp, primaryColor = AdfElectricCyan, accentColor = Color(0xFFD946EF)) },
                         title = "2. Credits",
                         badge = "DEVELOPER INFO",
-                        subtitle = "Build By Ishant Kohli • Coded By Google AI Studio",
+                        subtitle = "Built By Ishant Kohli • 100% Local On-Device Suite",
                         actionText = "View Animated Follow Me & Social Handles →",
                         onAction = {
                             onDismiss()
@@ -254,8 +255,8 @@ fun CoreSuiteMenuSheet(
                         ) {
                             Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 CreditDetailRow("Build By", "Ishant Kohli", AdfElectricCyan)
-                                CreditDetailRow("Coded By", "Google AI Studio", Color(0xFFD946EF))
-                                CreditDetailRow("App Official Build Date", "10/10/2026", Color(0xFF10B981))
+                                CreditDetailRow("Architecture", "100% Local On-Device", Color(0xFFD946EF))
+                                CreditDetailRow("Release Date", "15/11/2026", Color(0xFF10B981))
                             }
                         }
                     }
@@ -392,6 +393,23 @@ fun CoreSuiteMenuSheet(
                                     )
                                 }
                             }
+                        }
+                    )
+                }
+
+                // 8. Legal & Privacy Center
+                item {
+                    CoreSuiteCard(
+                        tag = "legal_center",
+                        accentColor = AdfElectricCyan,
+                        icon = { Icon(Icons.Default.Policy, contentDescription = "Legal & Privacy Center", tint = AdfElectricCyan, modifier = Modifier.size(24.dp)) },
+                        title = "8. Legal & Privacy Center",
+                        badge = "10 POLICIES",
+                        subtitle = "Read Privacy Policy, Terms, Data Retention, License & Security Disclosure",
+                        actionText = "Open Legal & Privacy Center →",
+                        onAction = {
+                            onDismiss()
+                            onNavigate(AppScreen.LEGAL_CENTER)
                         }
                     )
                 }

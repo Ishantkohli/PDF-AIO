@@ -8,10 +8,12 @@ import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -73,11 +75,21 @@ data class UnifiedDocItem(
     val dateModified: Long,
     val pageCount: Int = 0,
     val isFavorite: Boolean = false,
+    val isPinned: Boolean = false,
+    val folderCategory: String = "General",
     val isSample: Boolean = false,
     val fileType: DeviceFileType = DeviceFileType.PDF,
     val originalDoc: DocumentEntity? = null,
     val deviceFile: DeviceFileItem? = null
 )
+
+private enum class LibrarySortOption(val label: String) {
+    RECENT("Recent"),
+    NAME_ASC("Name A-Z"),
+    NAME_DESC("Name Z-A"),
+    LARGEST("Largest"),
+    MOST_PAGES("Most Pages")
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,6 +110,17 @@ fun HomeScreen(
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilterTab by remember { mutableIntStateOf(0) }
+    var selectedCategory by remember { mutableStateOf("All") }
+    var sortOption by remember { mutableStateOf(LibrarySortOption.RECENT) }
+    var showSortMenu by remember { mutableStateOf(false) }
+
+    // Smart Library Multi-Select & Batch Operations
+    var isSelectionMode by remember { mutableStateOf(false) }
+    val selectedDocIds = remember { mutableStateListOf<Long>() }
+    var showBatchRenameDialog by remember { mutableStateOf(false) }
+    var showCategoryAssignDialog by remember { mutableStateOf<List<DocumentEntity>?>(null) }
+    var showBatchDeleteConfirm by remember { mutableStateOf(false) }
+
     var showRefreshRateDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showQrScannerDialog by remember { mutableStateOf(false) }
@@ -197,10 +220,7 @@ fun HomeScreen(
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
             if (!readGranted) {
                 multiplePermissionLauncher.launch(
-                    arrayOf(
-                        android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-                    )
+                    arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
                 )
             } else {
                 hasStoragePerm = true
@@ -228,6 +248,12 @@ fun HomeScreen(
         }
     }
 
+    val availableCategories = remember(documents) {
+        val base = linkedSetOf("All", "General", "Scanned", "Signed", "Work", "Receipts")
+        documents.map { it.folderCategory.trim() }.filter { it.isNotBlank() }.forEach { base.add(it) }
+        base.toList()
+    }
+
     val unifiedDocs = remember(documents, deviceFiles) {
         val list = mutableListOf<UnifiedDocItem>()
         // DB documents
@@ -241,13 +267,15 @@ fun HomeScreen(
                     dateModified = doc.lastOpenedTimestamp,
                     pageCount = doc.pageCount,
                     isFavorite = doc.isFavorite,
+                    isPinned = doc.isPinned,
+                    folderCategory = doc.folderCategory.ifBlank { "General" },
                     isSample = doc.isSample,
                     fileType = DeviceFileType.PDF,
                     originalDoc = doc
                 )
             )
         }
-        // Scanned device files (PDF, DOCX, DOC, XLSX, TXT)
+        // Scanned device files (PDF, TXT)
         deviceFiles.forEach { file ->
             val alreadyInDb = list.any { it.title.equals(file.title, ignoreCase = true) }
             if (!alreadyInDb) {
@@ -260,6 +288,8 @@ fun HomeScreen(
                         dateModified = file.dateModified,
                         pageCount = if (file.fileType == DeviceFileType.PDF) 1 else 0,
                         isFavorite = false,
+                        isPinned = false,
+                        folderCategory = "Storage",
                         isSample = false,
                         fileType = file.fileType,
                         deviceFile = file
@@ -267,12 +297,12 @@ fun HomeScreen(
                 )
             }
         }
-        list.sortedByDescending { it.dateModified }
+        list
     }
 
-    val filteredDocs = remember(unifiedDocs, searchQuery, selectedFilterTab) {
+    val filteredDocs = remember(unifiedDocs, searchQuery, selectedFilterTab, selectedCategory, sortOption) {
         val query = searchQuery.trim().lowercase()
-        unifiedDocs.filter { doc ->
+        val filtered = unifiedDocs.filter { doc ->
             val ext = when {
                 doc.deviceFile != null -> {
                     val p = doc.deviceFile.path
@@ -296,28 +326,42 @@ fun HomeScreen(
                 true
             } else {
                 val cleanQuery = if (query.startsWith(".")) query.removePrefix(".") else query
-                // 1. Matches filename
                 doc.title.contains(query, ignoreCase = true) ||
-                // 2. Matches full filename including extension
-                "${doc.title}.$ext".contains(query, ignoreCase = true) ||
-                // 3. Matches file extension (e.g. "pdf", ".pdf", "docx", ".docx", "doc", "txt", "xlsx")
-                ext == cleanQuery ||
-                ".$ext" == query ||
-                ext.startsWith(cleanQuery) ||
-                typeBadge.equals(cleanQuery, ignoreCase = true) ||
-                // 4. Matches filepath if available
-                doc.deviceFile?.path?.contains(query, ignoreCase = true) == true ||
-                doc.originalDoc?.filePath?.contains(query, ignoreCase = true) == true
+                    "${doc.title}.$ext".contains(query, ignoreCase = true) ||
+                    ext == cleanQuery ||
+                    ".$ext" == query ||
+                    ext.startsWith(cleanQuery) ||
+                    typeBadge.equals(cleanQuery, ignoreCase = true) ||
+                    doc.folderCategory.contains(query, ignoreCase = true) ||
+                    doc.deviceFile?.path?.contains(query, ignoreCase = true) == true ||
+                    doc.originalDoc?.filePath?.contains(query, ignoreCase = true) == true
             }
 
             val matchesTab = when (selectedFilterTab) {
                 1 -> doc.isPdf
                 2 -> !doc.isPdf
                 3 -> doc.isFavorite
+                4 -> doc.isPinned
                 else -> true
             }
-            matchesQuery && matchesTab
+            val matchesCategory = selectedCategory == "All" ||
+                doc.folderCategory.equals(selectedCategory, ignoreCase = true)
+            matchesQuery && matchesTab && matchesCategory
         }
+
+        val comparator = when (sortOption) {
+            LibrarySortOption.RECENT -> compareByDescending<UnifiedDocItem> { it.isPinned }
+                .thenByDescending { it.dateModified }
+            LibrarySortOption.NAME_ASC -> compareByDescending<UnifiedDocItem> { it.isPinned }
+                .thenBy { it.title.lowercase() }
+            LibrarySortOption.NAME_DESC -> compareByDescending<UnifiedDocItem> { it.isPinned }
+                .thenByDescending { it.title.lowercase() }
+            LibrarySortOption.LARGEST -> compareByDescending<UnifiedDocItem> { it.isPinned }
+                .thenByDescending { it.sizeBytes }
+            LibrarySortOption.MOST_PAGES -> compareByDescending<UnifiedDocItem> { it.isPinned }
+                .thenByDescending { it.pageCount }
+        }
+        filtered.sortedWith(comparator)
     }
 
     Scaffold(
@@ -424,39 +468,109 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.navigationBarsPadding()
-            ) {
-                FloatingActionButton(
-                    onClick = {
-                        documentPickerLauncher.launch(
-                            arrayOf(
-                                "application/pdf",
-                                "text/plain"
-                            )
-                        )
-                    },
-                    containerColor = if (isLiquidTheme) GlassSurfaceDark else AdfSurfaceCard,
-                    contentColor = AdfElectricCyan,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .size(48.dp)
-                        .testTag("open_file_fab")
+            if (!isSelectionMode) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.navigationBarsPadding()
                 ) {
-                    AdfIcon.FileOpen(size = 20.dp, primaryColor = AdfElectricCyan, accentColor = AdfVibrantBlue)
-                }
+                    FloatingActionButton(
+                        onClick = {
+                            documentPickerLauncher.launch(
+                                arrayOf(
+                                    "application/pdf",
+                                    "text/plain"
+                                )
+                            )
+                        },
+                        containerColor = if (isLiquidTheme) GlassSurfaceDark else AdfSurfaceCard,
+                        contentColor = AdfElectricCyan,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("open_file_fab")
+                    ) {
+                        AdfIcon.FileOpen(size = 20.dp, primaryColor = AdfElectricCyan, accentColor = AdfVibrantBlue)
+                    }
 
-                ExtendedFloatingActionButton(
-                    onClick = { viewModel.navigateTo(AppScreen.SCANNER) },
-                    containerColor = AdfElectricCyan,
-                    contentColor = AdfMidnightBackground,
-                    shape = RoundedCornerShape(16.dp),
-                    icon = { AdfIcon.Camera(size = 20.dp, primaryColor = AdfMidnightBackground, accentColor = AdfCoral) },
-                    text = { Text("Scan Document", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp) },
-                    modifier = Modifier.testTag("scan_document_fab")
-                )
+                    ExtendedFloatingActionButton(
+                        onClick = { viewModel.navigateTo(AppScreen.SCANNER) },
+                        containerColor = AdfElectricCyan,
+                        contentColor = AdfMidnightBackground,
+                        shape = RoundedCornerShape(16.dp),
+                        icon = { AdfIcon.Camera(size = 20.dp, primaryColor = AdfMidnightBackground, accentColor = AdfCoral) },
+                        text = { Text("Scan Document", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp) },
+                        modifier = Modifier.testTag("scan_document_fab")
+                    )
+                }
+            }
+        },
+        bottomBar = {
+            if (isSelectionMode) {
+                val selectedEntities = documents.filter { selectedDocIds.contains(it.id) }
+                Surface(
+                    color = AdfObsidianSurface,
+                    tonalElevation = 8.dp,
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            IconButton(
+                                onClick = {
+                                    isSelectionMode = false
+                                    selectedDocIds.clear()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Exit Selection", tint = AdfTextPrimary)
+                            }
+                            Text(
+                                text = "${selectedEntities.size} selected",
+                                color = AdfElectricCyan,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedButton(
+                                onClick = { showBatchRenameDialog = true },
+                                enabled = selectedEntities.isNotEmpty(),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.testTag("batch_rename_button")
+                            ) {
+                                Text("Rename", fontSize = 11.5.sp, color = AdfTextPrimary)
+                            }
+                            OutlinedButton(
+                                onClick = { showCategoryAssignDialog = selectedEntities },
+                                enabled = selectedEntities.isNotEmpty(),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.testTag("batch_category_button")
+                            ) {
+                                Text("Folder", fontSize = 11.5.sp, color = AdfElectricCyan)
+                            }
+                            Button(
+                                onClick = { showBatchDeleteConfirm = true },
+                                enabled = selectedEntities.isNotEmpty(),
+                                colors = ButtonDefaults.buttonColors(containerColor = AdfCoral),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.testTag("batch_delete_button")
+                            ) {
+                                Text("Delete", fontSize = 11.5.sp, color = Color.White)
+                            }
+                        }
+                    }
+                }
             }
         },
         containerColor = if (isLiquidTheme) Color.Transparent else AdfMidnightBackground
@@ -574,7 +688,64 @@ fun HomeScreen(
                                 }
                             }
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box {
+                                    Surface(
+                                        onClick = { showSortMenu = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = AdfSurfaceVariant,
+                                        modifier = Modifier.testTag("sort_library_chip")
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Icon(Icons.Default.Sort, contentDescription = "Sort", tint = AdfElectricCyan, modifier = Modifier.size(13.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(text = sortOption.label, color = AdfTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                    DropdownMenu(
+                                        expanded = showSortMenu,
+                                        onDismissRequest = { showSortMenu = false },
+                                        modifier = Modifier.background(AcrobatDarkSurfaceElevated)
+                                    ) {
+                                        LibrarySortOption.values().forEach { opt ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        opt.label,
+                                                        color = if (sortOption == opt) AdfElectricCyan else AdfTextPrimary,
+                                                        fontWeight = if (sortOption == opt) FontWeight.Bold else FontWeight.Normal
+                                                    )
+                                                },
+                                                onClick = {
+                                                    sortOption = opt
+                                                    showSortMenu = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Surface(
+                                    onClick = {
+                                        isSelectionMode = !isSelectionMode
+                                        if (!isSelectionMode) selectedDocIds.clear()
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isSelectionMode) AdfElectricCyan.copy(alpha = 0.22f) else AdfSurfaceVariant,
+                                    modifier = Modifier.testTag("library_select_mode_chip")
+                                ) {
+                                    Text(
+                                        text = if (isSelectionMode) "Done" else "Select",
+                                        color = if (isSelectionMode) AdfElectricCyan else AdfTextSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+
                                 Surface(
                                     onClick = { folderPickerLauncher.launch(null) },
                                     shape = RoundedCornerShape(8.dp),
@@ -590,17 +761,12 @@ fun HomeScreen(
                                     ) {
                                         AdfIcon.FileOpen(size = 12.dp, primaryColor = AdfElectricCyan, accentColor = AdfElectricCyan)
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text(text = "Pick Folder", color = AdfElectricCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text(text = "Folder", color = AdfElectricCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
 
                                 if (isScanning) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = AdfElectricCyan)
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(text = "Scanning...", color = AdfElectricCyan, fontSize = 10.sp)
-                                    }
+                                    CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = AdfElectricCyan)
                                 }
                             }
                         }
@@ -649,7 +815,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         // Category & Extension Quick Filter Pills
-                        val filterCategories = listOf("All Files", "PDFs Only", "TXT Files", "Starred ⭐")
+                        val filterCategories = listOf("All Files", "PDFs Only", "TXT Files", "Starred ⭐", "Pinned 📌")
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -677,9 +843,8 @@ fun HomeScreen(
                             }
                         }
 
-                        // Quick Extension Filter Chips
+                        // Folder / Category Chips Row
                         Spacer(modifier = Modifier.height(8.dp))
-                        val extensionFilters = listOf(".pdf", ".txt")
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -687,34 +852,31 @@ fun HomeScreen(
                         ) {
                             item {
                                 Text(
-                                    text = "Extensions:",
+                                    text = "Folders:",
                                     color = AdfTextMuted,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
                                     modifier = Modifier.padding(end = 2.dp)
                                 )
                             }
-                            items(extensionFilters) { ext ->
-                                val isExtSelected = searchQuery.equals(ext, ignoreCase = true) ||
-                                        searchQuery.equals(ext.removePrefix("."), ignoreCase = true)
+                            items(availableCategories) { category ->
+                                val isCatSelected = selectedCategory.equals(category, ignoreCase = true)
                                 Surface(
-                                    onClick = {
-                                        searchQuery = if (isExtSelected) "" else ext
-                                    },
+                                    onClick = { selectedCategory = category },
                                     shape = RoundedCornerShape(10.dp),
-                                    color = if (isExtSelected) AdfElectricCyan.copy(alpha = 0.2f) else AdfSurfaceCard,
+                                    color = if (isCatSelected) AdfElectricCyan.copy(alpha = 0.2f) else AdfSurfaceCard,
                                     border = CardDefaults.outlinedCardBorder().copy(
-                                        brush = if (isExtSelected) Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))
+                                        brush = if (isCatSelected) Brush.horizontalGradient(listOf(AdfElectricCyan, AdfVibrantBlue))
                                         else Brush.horizontalGradient(listOf(AdfBorderSubtle, AdfBorderSubtle))
                                     ),
-                                    modifier = Modifier.testTag("filter_ext_${ext.removePrefix(".")}")
+                                    modifier = Modifier.testTag("filter_folder_$category")
                                 ) {
                                     Text(
-                                        text = ext,
-                                        color = if (isExtSelected) AdfElectricCyan else AdfTextSecondary,
+                                        text = category,
+                                        color = if (isCatSelected) AdfElectricCyan else AdfTextSecondary,
                                         fontSize = 11.sp,
-                                        fontWeight = if (isExtSelected) FontWeight.Bold else FontWeight.Normal,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Normal,
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                                     )
                                 }
                             }
@@ -815,15 +977,31 @@ fun HomeScreen(
                         key = { it.id },
                         contentType = { it.fileType }
                     ) { item ->
+                        val docId = item.originalDoc?.id
+                        val isCardSelected = docId != null && selectedDocIds.contains(docId)
                         UnifiedDocumentCard(
                             doc = item,
                             context = context,
+                            isSelectionMode = isSelectionMode,
+                            isSelected = isCardSelected,
+                            onLongPress = {
+                                if (docId != null) {
+                                    isSelectionMode = true
+                                    if (!selectedDocIds.contains(docId)) {
+                                        selectedDocIds.add(docId)
+                                    }
+                                }
+                            },
                             onOpenStandard = {
-                                viewModel.setPureViewerMode(false)
-                                if (item.originalDoc != null) {
-                                    viewModel.openDocument(item.originalDoc)
-                                } else if (item.deviceFile != null) {
-                                    viewModel.openDeviceFile(item.deviceFile, pureViewer = false)
+                                if (isSelectionMode && docId != null) {
+                                    if (isCardSelected) selectedDocIds.remove(docId) else selectedDocIds.add(docId)
+                                } else {
+                                    viewModel.setPureViewerMode(false)
+                                    if (item.originalDoc != null) {
+                                        viewModel.openDocument(item.originalDoc)
+                                    } else if (item.deviceFile != null) {
+                                        viewModel.openDeviceFile(item.deviceFile, pureViewer = false)
+                                    }
                                 }
                             },
                             onOpenPureViewer = {
@@ -853,6 +1031,16 @@ fun HomeScreen(
                             onToggleFavorite = {
                                 if (item.originalDoc != null) {
                                     viewModel.toggleFavorite(item.originalDoc)
+                                }
+                            },
+                            onTogglePin = {
+                                if (item.originalDoc != null) {
+                                    viewModel.togglePin(item.originalDoc)
+                                }
+                            },
+                            onAssignCategory = {
+                                if (item.originalDoc != null) {
+                                    showCategoryAssignDialog = listOf(item.originalDoc)
                                 }
                             },
                             onDelete = {
@@ -1012,6 +1200,146 @@ fun HomeScreen(
             }
         )
     }
+
+    // Batch Rename Dialog
+    if (showBatchRenameDialog) {
+        var prefix by remember { mutableStateOf("Document") }
+        var startNumText by remember { mutableStateOf("1") }
+        val selectedEntities = documents.filter { selectedDocIds.contains(it.id) }
+        AlertDialog(
+            onDismissRequest = { showBatchRenameDialog = false },
+            containerColor = AdfSurfaceCard,
+            title = { Text("Batch Rename (${selectedEntities.size} files)", color = AdfTextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Files will be renamed as <Prefix>_01.pdf, <Prefix>_02.pdf and synced across storage.",
+                        color = AdfTextSecondary,
+                        fontSize = 12.5.sp
+                    )
+                    OutlinedTextField(
+                        value = prefix,
+                        onValueChange = { prefix = it },
+                        label = { Text("Filename Prefix") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = startNumText,
+                        onValueChange = { startNumText = it.filter { c -> c.isDigit() } },
+                        label = { Text("Starting Number") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val startNum = startNumText.toIntOrNull() ?: 1
+                        showBatchRenameDialog = false
+                        viewModel.batchRenameDocuments(selectedEntities, prefix, startNum) { _, _ ->
+                            isSelectionMode = false
+                            selectedDocIds.clear()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AdfElectricCyan)
+                ) {
+                    Text("Rename All", color = AdfMidnightBackground, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchRenameDialog = false }) {
+                    Text("Cancel", color = AdfTextSecondary)
+                }
+            }
+        )
+    }
+
+    // Category / Folder Assignment Dialog
+    showCategoryAssignDialog?.let { targets ->
+        var customCat by remember { mutableStateOf(targets.firstOrNull()?.folderCategory ?: "General") }
+        val presets = listOf("General", "Scanned", "Signed", "Work", "Receipts", "Study")
+        AlertDialog(
+            onDismissRequest = { showCategoryAssignDialog = null },
+            containerColor = AdfSurfaceCard,
+            title = { Text("Assign Folder / Category", color = AdfTextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(presets) { p ->
+                            FilterChip(
+                                selected = customCat.equals(p, ignoreCase = true),
+                                onClick = { customCat = p },
+                                label = { Text(p, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = customCat,
+                        onValueChange = { customCat = it },
+                        label = { Text("Folder Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cat = customCat.trim().ifBlank { "General" }
+                        showCategoryAssignDialog = null
+                        if (targets.size == 1) {
+                            viewModel.updateDocumentCategory(targets.first(), cat)
+                        } else {
+                            viewModel.batchUpdateCategory(targets, cat)
+                            isSelectionMode = false
+                            selectedDocIds.clear()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AdfElectricCyan)
+                ) {
+                    Text("Save Folder", color = AdfMidnightBackground, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCategoryAssignDialog = null }) {
+                    Text("Cancel", color = AdfTextSecondary)
+                }
+            }
+        )
+    }
+
+    // Batch Delete Confirmation
+    if (showBatchDeleteConfirm) {
+        val selectedEntities = documents.filter { selectedDocIds.contains(it.id) }
+        AlertDialog(
+            onDismissRequest = { showBatchDeleteConfirm = false },
+            containerColor = AdfSurfaceCard,
+            title = { Text("Delete ${selectedEntities.size} Documents?", color = AdfCoral, fontWeight = FontWeight.Bold) },
+            text = {
+                Text("This permanently deletes the selected library PDFs from app storage.", color = AdfTextSecondary)
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showBatchDeleteConfirm = false
+                        viewModel.batchDeleteDocuments(selectedEntities)
+                        isSelectionMode = false
+                        selectedDocIds.clear()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AdfCoral)
+                ) {
+                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchDeleteConfirm = false }) {
+                    Text("Cancel", color = AdfTextSecondary)
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -1059,15 +1387,21 @@ fun QuickToolChip(
 /**
  * Unified Card displaying either a PDF, Word, Excel, or Text document with bespoke custom icons
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun UnifiedDocumentCard(
     doc: UnifiedDocItem,
     context: Context,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onLongPress: () -> Unit = {},
     onOpenStandard: () -> Unit,
     onOpenPureViewer: () -> Unit,
     onOrganize: () -> Unit,
     onConvertToOther: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onTogglePin: () -> Unit = {},
+    onAssignCategory: () -> Unit = {},
     onDelete: () -> Unit,
     onPreviewFirstPage: () -> Unit = {}
 ) {
@@ -1089,20 +1423,29 @@ fun UnifiedDocumentCard(
     val isLiquidTheme = activeThemeStyle == AppThemeStyle.LIQUID_GLASS || activeThemeStyle == AppThemeStyle.FROSTED_CRYSTAL
 
     Card(
-        onClick = onOpenStandard,
-        colors = CardDefaults.cardColors(containerColor = if (isLiquidTheme) GlassSurfaceDark else AdfObsidianSurface),
+        colors = CardDefaults.cardColors(
+            containerColor = when {
+                isSelected -> AdfElectricCyan.copy(alpha = 0.14f)
+                isLiquidTheme -> GlassSurfaceDark
+                else -> AdfObsidianSurface
+            }
+        ),
         shape = RoundedCornerShape(16.dp),
         border = CardDefaults.outlinedCardBorder().copy(
-            brush = if (isLiquidTheme) LiquidGlassBorderGradient else Brush.linearGradient(
-                listOf(
-                    AdfBorderSubtle,
-                    badgeColor.copy(alpha = 0.25f)
-                )
-            )
+            width = if (isSelected) 2.dp else 1.dp,
+            brush = when {
+                isSelected -> Brush.linearGradient(listOf(AdfElectricCyan, AdfVibrantBlue))
+                isLiquidTheme -> LiquidGlassBorderGradient
+                else -> Brush.linearGradient(listOf(AdfBorderSubtle, badgeColor.copy(alpha = 0.25f)))
+            }
         ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 5.dp)
+            .combinedClickable(
+                onClick = onOpenStandard,
+                onLongClick = onLongPress
+            )
             .testTag("unified_doc_${doc.id}")
     ) {
         Row(
@@ -1111,14 +1454,22 @@ fun UnifiedDocumentCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon / Document Type Badge (Instant GPU-rendered vector, silky-smooth 60+ FPS, eliminates back-button glitch)
+            if (isSelectionMode && doc.originalDoc != null) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onOpenStandard() },
+                    colors = CheckboxDefaults.colors(checkedColor = AdfElectricCyan)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+
             Box(
                 modifier = Modifier
                     .size(46.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(badgeColor.copy(alpha = 0.14f))
                     .border(1.dp, badgeColor.copy(alpha = 0.28f), RoundedCornerShape(12.dp))
-                    .clickable(enabled = doc.isPdf) { onPreviewFirstPage() },
+                    .clickable(enabled = doc.isPdf && !isSelectionMode) { onPreviewFirstPage() },
                 contentAlignment = Alignment.Center
             ) {
                 when (doc.fileType) {
@@ -1139,6 +1490,15 @@ fun UnifiedDocumentCard(
             // Details
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (doc.isPinned) {
+                        Icon(
+                            imageVector = Icons.Default.PushPin,
+                            contentDescription = "Pinned",
+                            tint = AdfElectricCyan,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                     Text(
                         text = doc.title,
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
@@ -1158,6 +1518,20 @@ fun UnifiedDocumentCard(
                             color = badgeColor,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                         )
+                    }
+                    if (doc.originalDoc != null && doc.folderCategory.isNotBlank() && doc.folderCategory != "General") {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = AdfElectricCyan.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = doc.folderCategory,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.SemiBold),
+                                color = AdfElectricCyan,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
                     }
                 }
 
@@ -1230,6 +1604,24 @@ fun UnifiedDocumentCard(
                     onDismissRequest = { showMenu = false },
                     modifier = Modifier.background(AcrobatDarkSurfaceElevated)
                 ) {
+                    if (doc.originalDoc != null) {
+                        DropdownMenuItem(
+                            text = { Text(if (doc.isPinned) "Unpin Document" else "Pin to Top", color = AdfElectricCyan) },
+                            leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, tint = AdfElectricCyan, modifier = Modifier.size(18.dp)) },
+                            onClick = {
+                                showMenu = false
+                                onTogglePin()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Move to Folder (${doc.folderCategory})", color = AdfTextPrimary) },
+                            leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null, tint = AdfElectricCyan, modifier = Modifier.size(18.dp)) },
+                            onClick = {
+                                showMenu = false
+                                onAssignCategory()
+                            }
+                        )
+                    }
                     if (doc.isPdf) {
                         DropdownMenuItem(
                             text = { Text("Open Reader & Tools", color = AdfTextPrimary) },

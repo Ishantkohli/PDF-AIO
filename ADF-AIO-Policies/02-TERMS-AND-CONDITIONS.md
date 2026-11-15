@@ -1,84 +1,71 @@
-# Terms and Conditions
+# PDF (AIO) — Terms and Conditions
 
-**ADF AIO**  
-**Effective date:** [PLACEHOLDER: 2026-10-20]  
-**Last updated:** [PLACEHOLDER: 2026-10-20]
+**Effective date:** 15 November 2026  
+**Last updated:** 15 November 2026  
+**Application:** PDF (AIO) (`com.aistudio.acrobatreader.hptwqz`, v5.3.0)  
+**Operator:** Ishant Kohli (`[TODO: Confirm whether operated solely as an individual developer or through a registered business entity]`)  
+**Website:** https://ishantkohli.github.io/Web  
+**Contact:** ishantkohlikohli@gmail.com
 
-These Terms and Conditions (“Terms”) govern your access to and use of ADF AIO (“the App”), operated by Ishant Kohli (separate registered business entity not confirmed) (“we,” “us,” or “our”). By accessing or using the App, you agree to these Terms. If you do not agree, do not use the App.
+These Terms and Conditions ("Terms") govern your use of the **PDF (AIO)** Android application ("the App") provided by **Ishant Kohli** ("we", "us", or "our"). By installing or using the App, you agree to these Terms. If you do not agree, do not use the App.
 
-## 1. The service
+---
 
-PDF AIO is an all-in-one application that may provide tools, utilities, productivity features, creative resources, and links to third-party services. Features may change, be added, or be discontinued.
+## 1. Nature of the Service
+
+PDF (AIO) is a local-first Android document suite offering PDF reading, camera scanning, annotations, graphic signatures, splitting, merging, watermarking, compression, format conversion, diff comparison, and redaction tools. Features may be added, modified, or retired across releases.
 
 ## 2. Eligibility
 
-You must be legally able to agree to these Terms in your jurisdiction. If you are under the age required to consent to online services, use the App only with appropriate parent or guardian involvement where required by law.
+You must have legal capacity to accept these Terms under the laws applicable where you reside. Where required by law for younger users, use the App only with parent or legal guardian supervision.
 
-## 3. Acceptable use
+## 3. Acceptable Use
 
-You agree not to:
+You agree not to use the App to violate laws, forge or tamper unlawfully with official documents, distribute malware, interfere with third-party rights, or redistribute/rebrand proprietary App components. Additional rules appear in [`08-ACCEPTABLE-USE-POLICY.md`](08-ACCEPTABLE-USE-POLICY.md).
 
-- Use the App for unlawful, fraudulent, abusive, or harmful purposes.
-- Attempt unauthorized access to systems, accounts, data, or infrastructure.
-- Interfere with or disrupt the App, its security, or its availability.
-- Upload malware or use the App to distribute malicious content.
-- Scrape, overload, reverse engineer, or automate access in ways prohibited by law or these Terms.
-- Misrepresent your identity or infringe another person's rights.
-- Circumvent technical protections or access controls.
+## 4. Intellectual Property & License Scope
 
-Additional requirements appear in the Acceptable Use Policy.
+PDF (AIO)'s original source code, interface, icons, themes, and documentation are proprietary works owned by **Ishant Kohli**, subject to the **PDF (AIO) Proprietary Software License** (root [`../LICENSE`](../LICENSE)). Use of the pre-built APK does **not** grant permission to extract, reuse, modify, or redistribute proprietary source code. Third-party open-source packages remain governed by their own licenses.
 
-## 4. Intellectual property and source code
+## 5. User Responsibility for Outputs & Electronic Signatures
 
-Unless expressly stated otherwise in a separate written license, the App's original source code, design, branding, layout, original graphics, and documentation are owned by or licensed to Ishant Kohli and are protected by applicable intellectual-property laws.
+You retain sole ownership and responsibility for all documents you scan, edit, redact, sign, encrypt, or convert:
 
-You may use the publicly available, pre-built App for its intended purpose, subject to these Terms. Access to the App does **not** grant permission to copy, redistribute, publish, sublicense, sell, modify, create derivative applications from, or commercially exploit its source code or proprietary assets.
+- **Redaction Verification:** Always visually review redacted PDFs in multiple independent viewers before external distribution to confirm irreversible removal meets your compliance needs.
+- **Format Conversions & Diffs:** Converted files (PDF ↔ DOCX/TXT/Images) and Myers document comparisons are utility outputs; verify critical formatting, legal figures, and medical/financial text before relying on them.
+- **Graphic Signatures Disclaimer:** PDF (AIO) creates visual handwritten/typed signature overlays rather than cryptographic certificate-authority (CA) e-signatures. Confirm whether graphic signatures satisfy legal requirements in your jurisdiction.
+- **Encryption Passwords:** Passwords applied via PDF Security Tools cannot be recovered by the developer; retain secure copies of any passwords.
 
-The specific restrictions and permitted use are set out in the Proprietary License. Third-party components remain subject to their own licenses and rights.
+## 6. Updates, Feedback & External Links
 
-## 5. Third-party services
+Core PDF tools function offline without internet access. The GitHub Releases updater checks `https://api.github.com/repos/{owner}/{repo}/releases/latest` (`ishantkohli/PDF-AIO` by default) to inform you of new releases, and submitting the optional Feedback Form sends your entered feedback to the developer. External browser links and UPI donation links are operated by third parties under their own terms.
 
-The App may link to or integrate third-party websites, platforms, APIs, widgets, or embeds. Those services are controlled by their respective providers. We do not control and are not responsible for their content, availability, policies, or practices. Your use of them may be subject to separate terms and privacy policies.
+## 7. Disclaimers
 
-## 6. Availability and changes
+To the maximum extent permitted by applicable law, **PDF (AIO)** is provided **"AS IS"** and **"AS AVAILABLE"** without warranties of uninterrupted availability, defect-free conversion fidelity, or fitness for regulated legal/compliance purposes. Mandatory consumer rights that cannot lawfully be excluded remain unaffected.
 
-We aim to keep the App available and functioning, but do not guarantee uninterrupted, error-free, or continuous availability. We may update, suspend, or discontinue features for maintenance, security, legal, or operational reasons.
+## 8. Limitation of Liability
 
-## 7. No professional advice
+To the maximum extent permitted by applicable law, Ishant Kohli shall not be liable for indirect, incidental, special, consequential, or punitive damages, or document/data loss arising from device failure, forgotten PDF passwords, or reliance on converted outputs. Nothing in these Terms limits liability that cannot legally be excluded.
 
-Unless explicitly stated otherwise, tools and information provided through the App are for general informational or convenience purposes and are not legal, medical, financial, or other professional advice. You are responsible for evaluating outputs before relying on them.
+## 9. Termination
 
-## 8. Disclaimers
+Permission to use the App may be revoked if you materially violate these Terms or the Proprietary Software License. You may stop using the App at any time by uninstalling it and deleting local exports.
 
-To the maximum extent permitted by applicable law, the App is provided “as is” and “as available,” without warranties not expressly required by law. We do not warrant that every feature will be accurate, uninterrupted, secure, compatible, or available at all times.
+## 10. Privacy & Companion Policies
 
-Nothing in these Terms excludes a consumer right or liability that cannot legally be excluded.
+Data handling is governed by the [`01-PRIVACY-POLICY.md`](01-PRIVACY-POLICY.md) and [`05-DATA-RETENTION-AND-DELETION.md`](05-DATA-RETENTION-AND-DELETION.md). Website storage details appear in [`03-COOKIE-POLICY.md`](03-COOKIE-POLICY.md).
 
-## 9. Limitation of liability
+## 11. Updates to These Terms
 
-To the maximum extent permitted by applicable law, Ishant Kohli will not be liable for indirect, incidental, special, consequential, or punitive losses arising from use of the App. Any other limitation of liability must be reviewed for enforceability in the relevant jurisdiction. These Terms do not exclude liability that cannot lawfully be excluded.
+Material updates will be reflected in the updated effective date and bundled inside future App releases via the **Legal & Privacy Center** and repository.
 
-## 10. Suspension or termination
+## 12. Governing Law & Disputes
 
-We may restrict or suspend access where reasonably necessary to protect the App, users, third parties, or comply with law, especially in response to a material breach of these Terms. Where appropriate, we will provide notice or an opportunity to remedy the issue.
+`[TODO: Confirm governing law jurisdiction and dispute resolution venue with qualified legal counsel prior to commercial distribution.]` Nothing in this clause overrides non-waivable consumer protections in your jurisdiction.
 
-## 11. Privacy
+## 13. Contact
 
-Our handling of personal information is described in the Privacy Policy. Cookie and similar-technology choices are described in the Cookie Policy.
-
-## 12. Changes to these Terms
-
-We may revise these Terms as the App evolves. We will update the date above and provide additional notice where required. Continued use after changes take effect constitutes acceptance only to the extent permitted by applicable law.
-
-## 13. Governing law and disputes
-
-These Terms are governed by the laws of [PLACEHOLDER: jurisdiction], excluding conflict-of-law rules where permitted. Courts or dispute-resolution venue: [PLACEHOLDER: location]. Have this section reviewed for consumer-law requirements in each relevant market.
-
-## 14. Contact
-
-Operator: Ishant Kohli 
-Email: ishantkohlikohli@gmail.com  
-Website: https://ishantkohli.me
-
-
-> **Publication note:** Confirm remaining bracketed items, including venue/jurisdiction, and obtain legal review before publication.
+- **Developer:** Ishant Kohli
+- **Email:** `ishantkohlikohli@gmail.com`
+- **Website:** `https://ishantkohli.github.io/Web`

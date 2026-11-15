@@ -61,69 +61,97 @@ class MainActivity : ComponentActivity() {
         setContent {
             val activeThemeStyle by ThemeManager.currentTheme.collectAsStateWithLifecycle()
             AcrobatTheme(colorScheme = ThemeManager.getColorScheme(activeThemeStyle)) {
-                val viewModel: PdfViewModel = viewModel()
-                val updateViewModel: com.example.update.UpdateViewModel = viewModel()
-                val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
-                val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
-                val updateMessage by updateViewModel.userMessage.collectAsStateWithLifecycle()
-                val showFpsHud by viewModel.showFpsHud.collectAsStateWithLifecycle()
-                val snackbarHostState = remember { SnackbarHostState() }
-                val scope = rememberCoroutineScope()
                 val context = androidx.compose.ui.platform.LocalContext.current
-
-                // Background check for PDF (AIO) app updates on startup
-                LaunchedEffect(Unit) {
-                    updateViewModel.checkForUpdates(context, manual = false)
-                }
-
-                // Global BackHandler: Navigate back to Home from secondary tabs
-                if (currentScreen in listOf(AppScreen.CONVERSION_HUB, AppScreen.SIGNATURE_VAULT, AppScreen.SUPPORT, AppScreen.CREDITS, AppScreen.FEEDBACK)) {
-                    BackHandler {
-                        viewModel.navigateTo(AppScreen.HOME)
-                    }
-                }
-
-                // Handle status messages
-                LaunchedEffect(statusMessage) {
-                    statusMessage?.let { msg ->
-                        scope.launch {
-                            snackbarHostState.showSnackbar(msg)
-                            viewModel.clearStatusMessage()
-                        }
-                    }
-                }
-
-                // Handle update messages
-                LaunchedEffect(updateMessage) {
-                    updateMessage?.let { msg ->
-                        scope.launch {
-                            snackbarHostState.showSnackbar(msg)
-                            updateViewModel.clearUserMessage()
-                        }
-                    }
-                }
-
-                // Handle intent when opening PDF from outside or tapping update notification
-                LaunchedEffect(intent) {
-                    handleIntent(intent, viewModel, updateViewModel)
-                }
-
-                // Request notification permission on Android 13+ (API 33+)
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-                    ) { isGranted ->
-                        android.util.Log.d("MainActivity", "POST_NOTIFICATIONS permission: $isGranted")
-                    }
-
-                    LaunchedEffect(Unit) {
-                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                    }
-                }
-
                 val isLiquidTheme = activeThemeStyle == AppThemeStyle.LIQUID_GLASS || activeThemeStyle == AppThemeStyle.FROSTED_CRYSTAL
+                var requiresLegalConsent by remember {
+                    mutableStateOf(com.example.data.legal.LegalConsentManager.needsConsent(context))
+                }
+                val consentTriggerReason = remember(requiresLegalConsent) {
+                    com.example.data.legal.LegalConsentManager.getTriggerReason(context)
+                }
+
+                if (requiresLegalConsent) {
+                    val consentScreenContent = @Composable {
+                        com.example.ui.screens.LegalConsentGateScreen(
+                            triggerReason = consentTriggerReason,
+                            onAccept = {
+                                com.example.data.legal.LegalConsentManager.recordAcceptance(context)
+                                requiresLegalConsent = false
+                            },
+                            onDeny = {
+                                val activity = context as? android.app.Activity
+                                activity?.finishAffinity()
+                                activity?.finishAndRemoveTask()
+                            }
+                        )
+                    }
+                    if (isLiquidTheme) {
+                        LiquidGlassBackground { consentScreenContent() }
+                    } else {
+                        consentScreenContent()
+                    }
+                } else {
+                    val viewModel: PdfViewModel = viewModel()
+                    val updateViewModel: com.example.update.UpdateViewModel = viewModel()
+                    val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
+                    val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
+                    val updateMessage by updateViewModel.userMessage.collectAsStateWithLifecycle()
+                    val showFpsHud by viewModel.showFpsHud.collectAsStateWithLifecycle()
+                    val snackbarHostState = remember { SnackbarHostState() }
+                    val scope = rememberCoroutineScope()
+
+                    // Background check for PDF (AIO) app updates on startup + periodic 8-hour scheduler
+                    LaunchedEffect(Unit) {
+                        com.example.update.UpdateCheckAlarmReceiver.schedulePeriodicCheck(context)
+                        updateViewModel.checkForUpdates(context, manual = false)
+                    }
+
+                    // Global BackHandler: Navigate back to Home from secondary tabs
+                    if (currentScreen in listOf(AppScreen.CONVERSION_HUB, AppScreen.SIGNATURE_VAULT, AppScreen.SUPPORT, AppScreen.CREDITS, AppScreen.FEEDBACK, AppScreen.LEGAL_CENTER)) {
+                        BackHandler {
+                            viewModel.navigateTo(AppScreen.HOME)
+                        }
+                    }
+
+                    // Handle status messages
+                    LaunchedEffect(statusMessage) {
+                        statusMessage?.let { msg ->
+                            scope.launch {
+                                snackbarHostState.showSnackbar(msg)
+                                viewModel.clearStatusMessage()
+                            }
+                        }
+                    }
+
+                    // Handle update messages
+                    LaunchedEffect(updateMessage) {
+                        updateMessage?.let { msg ->
+                            scope.launch {
+                                snackbarHostState.showSnackbar(msg)
+                                updateViewModel.clearUserMessage()
+                            }
+                        }
+                    }
+
+                    // Handle intent when opening PDF from outside or tapping update notification
+                    LaunchedEffect(intent) {
+                        handleIntent(intent, viewModel, updateViewModel)
+                    }
+
+                    // Request notification permission on Android 13+ (API 33+)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                            contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+                        ) { isGranted ->
+                            android.util.Log.d("MainActivity", "POST_NOTIFICATIONS permission: $isGranted")
+                        }
+
+                        LaunchedEffect(Unit) {
+                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        }
+                    }
 
                 val appMainContent = @Composable {
                     Scaffold(
@@ -298,6 +326,9 @@ class MainActivity : ComponentActivity() {
                                         viewModel = viewModel,
                                         onBack = { viewModel.closeTxtDocument() }
                                     )
+                                    AppScreen.LEGAL_CENTER -> com.example.ui.screens.LegalPrivacyCenterScreen(
+                                        onBack = { viewModel.navigateTo(AppScreen.HOME) }
+                                    )
                                 }
                             }
 
@@ -309,12 +340,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                if (isLiquidTheme) {
-                    LiquidGlassBackground {
+                    if (isLiquidTheme) {
+                        LiquidGlassBackground {
+                            appMainContent()
+                        }
+                    } else {
                         appMainContent()
                     }
-                } else {
-                    appMainContent()
                 }
             }
         }

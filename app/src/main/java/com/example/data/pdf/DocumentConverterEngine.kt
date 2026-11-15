@@ -35,7 +35,9 @@ object DocumentConverterEngine {
         val rotationAngle: Float = 45f,
         val fontSizeSp: Float = 38f,
         val isTiledPattern: Boolean = false,
-        val applyToAllPages: Boolean = true
+        val applyToAllPages: Boolean = true,
+        val imagePath: String? = null,
+        val imageScale: Float = 0.35f
     )
 
     enum class ImageFitMode {
@@ -543,19 +545,32 @@ object DocumentConverterEngine {
         val docxPages = mutableListOf<DocxPageContent>()
 
         try {
-            pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
-            renderer = PdfRenderer(pfd)
-            val totalPdfPages = renderer.pageCount
-
-            // Extract real decompressed & ToUnicode-mapped text per page
             val extractedPages = PdfTextExtractor.extractPages(pdfFile)
+            PdfBoxInitializer.ensureInitialized(context)
+            val pdfBoxPageCount = runCatching {
+                com.tom_roush.pdfbox.pdmodel.PDDocument.load(pdfFile).use { it.numberOfPages }
+            }.getOrNull()
+
+            val totalPdfPages = pdfBoxPageCount ?: run {
+                pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                renderer = PdfRenderer(pfd!!)
+                renderer!!.pageCount
+            }
+
+            val pdfBoxTextByPage = mutableMapOf<Int, List<String>>()
 
             for (pageIdx in 0 until totalPdfPages) {
                 val pageNum = pageIdx + 1
-                val textParas = extractedPages.getOrNull(pageIdx)?.paragraphs
+                var textParas = extractedPages.getOrNull(pageIdx)?.paragraphs
                     ?.map { PdfTextExtractor.sanitizeExtractedLine(it) }
                     ?.filter { it.isNotBlank() }
                     ?: emptyList()
+
+                if (textParas.isEmpty()) {
+                    textParas = pdfBoxTextByPage.getOrPut(pageIdx) {
+                        extractParagraphsWithPdfBox(context, pdfFile, pageIdx)
+                    }
+                }
 
                 if (textParas.isNotEmpty()) {
                     docxPages.add(
@@ -565,8 +580,14 @@ object DocumentConverterEngine {
                         )
                     )
                 } else {
-                    // Image/Scanned PDF page (no selectable text layer) -> render crisp JPEG page image into DOCX
-                    val page = renderer.openPage(pageIdx)
+                    // Image/Scanned PDF page (no selectable text layer) -> render crisp JPEG page image into DOCX lazily
+                    if (renderer == null) {
+                        if (pfd == null) {
+                            pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                        }
+                        renderer = PdfRenderer(pfd!!)
+                    }
+                    val page = renderer!!.openPage(pageIdx)
                     val targetW = (page.width * 2).coerceIn(400, 1400)
                     val scaleFactor = targetW.toFloat() / page.width.coerceAtLeast(1)
                     val targetH = (page.height * scaleFactor).toInt().coerceAtLeast(1)
@@ -592,7 +613,7 @@ object DocumentConverterEngine {
                     )
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e(TAG, "Error converting PDF to Word", e)
             val fallbackPages = PdfTextExtractor.extractPages(pdfFile)
             if (fallbackPages.isNotEmpty()) {
@@ -836,8 +857,17 @@ object DocumentConverterEngine {
         var pfd: ParcelFileDescriptor? = null
         var renderer: PdfRenderer? = null
         val newDoc = PdfDocument()
+        var logoBitmap: Bitmap? = null
 
         try {
+            if (!options.imagePath.isNullOrBlank()) {
+                val imgFile = File(options.imagePath)
+                if (imgFile.exists() && imgFile.length() > 0L) {
+                    val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+                    logoBitmap = BitmapFactory.decodeFile(imgFile.absolutePath, opts)
+                }
+            }
+
             pfd = ParcelFileDescriptor.open(sourcePdf, ParcelFileDescriptor.MODE_READ_ONLY)
             renderer = PdfRenderer(pfd)
             val totalPages = renderer.pageCount
@@ -849,6 +879,9 @@ object DocumentConverterEngine {
                 isFakeBoldText = true
                 isAntiAlias = true
                 textAlign = Paint.Align.CENTER
+            }
+            val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                alpha = (options.opacity * 255).toInt().coerceIn(15, 250)
             }
 
             for (pageIdx in 0 until totalPages) {
@@ -871,21 +904,50 @@ object DocumentConverterEngine {
                 pageBmp.recycle()
 
                 if (options.applyToAllPages || pageIdx == 0) {
-                    canvas.save()
-                    if (options.isTiledPattern) {
+                    val bmp = logoBitmap
+                    if (bmp != null) {
+                        val targetSpan = minOf(w, h) * options.imageScale.coerceIn(0.12f, 0.85f)
+                        val ratio = bmp.height.toFloat() / bmp.width.coerceAtLeast(1)
+                        val drawW = targetSpan
+                        val drawH = targetSpan * ratio
+                        canvas.save()
                         canvas.rotate(-options.rotationAngle, w / 2f, h / 2f)
-                        val stepX = (w * 0.45f).coerceAtLeast(150f)
-                        val stepY = (h * 0.22f).coerceAtLeast(120f)
-                        for (x in (-w).toInt()..(w * 2).toInt() step stepX.toInt()) {
-                            for (y in (-h).toInt()..(h * 2).toInt() step stepY.toInt()) {
-                                canvas.drawText(options.text, x.toFloat(), y.toFloat(), watermarkPaint)
+                        if (options.isTiledPattern) {
+                            val stepX = (drawW * 1.6f).coerceAtLeast(140f)
+                            val stepY = (drawH * 1.8f).coerceAtLeast(140f)
+                            for (x in (-w).toInt()..(w * 2).toInt() step stepX.toInt()) {
+                                for (y in (-h).toInt()..(h * 2).toInt() step stepY.toInt()) {
+                                    val dest = RectF(x - drawW / 2f, y - drawH / 2f, x + drawW / 2f, y + drawH / 2f)
+                                    canvas.drawBitmap(bmp, null, dest, logoPaint)
+                                }
                             }
+                        } else {
+                            val cx = w / 2f
+                            val cy = if (options.text.isNotBlank()) h * 0.44f else h / 2f
+                            val dest = RectF(cx - drawW / 2f, cy - drawH / 2f, cx + drawW / 2f, cy + drawH / 2f)
+                            canvas.drawBitmap(bmp, null, dest, logoPaint)
                         }
-                    } else {
-                        canvas.rotate(-options.rotationAngle, w / 2f, h / 2f)
-                        canvas.drawText(options.text, w / 2f, h / 2f, watermarkPaint)
+                        canvas.restore()
                     }
-                    canvas.restore()
+
+                    if (options.text.isNotBlank()) {
+                        canvas.save()
+                        if (options.isTiledPattern) {
+                            canvas.rotate(-options.rotationAngle, w / 2f, h / 2f)
+                            val stepX = (w * 0.45f).coerceAtLeast(150f)
+                            val stepY = (h * 0.22f).coerceAtLeast(120f)
+                            for (x in (-w).toInt()..(w * 2).toInt() step stepX.toInt()) {
+                                for (y in (-h).toInt()..(h * 2).toInt() step stepY.toInt()) {
+                                    canvas.drawText(options.text, x.toFloat(), y.toFloat(), watermarkPaint)
+                                }
+                            }
+                        } else {
+                            canvas.rotate(-options.rotationAngle, w / 2f, h / 2f)
+                            val textY = if (bmp != null) h * 0.62f else h / 2f
+                            canvas.drawText(options.text, w / 2f, textY, watermarkPaint)
+                        }
+                        canvas.restore()
+                    }
                 }
 
                 newDoc.finishPage(newPage)
@@ -899,6 +961,7 @@ object DocumentConverterEngine {
             Log.e(TAG, "Error stamping watermark", e)
             false
         } finally {
+            try { logoBitmap?.recycle() } catch (_: Exception) {}
             try { newDoc.close() } catch (ignored: Exception) {}
             try { renderer?.close() } catch (ignored: Exception) {}
             try { pfd?.close() } catch (ignored: Exception) {}
@@ -912,7 +975,8 @@ object DocumentConverterEngine {
     suspend fun convertPdfToTxt(
         pdfFile: File,
         outputTxtFile: File,
-        docTitle: String = "Exported Text"
+        docTitle: String = "Exported Text",
+        context: Context? = null
     ): Boolean = withContext(Dispatchers.IO) {
         try {
             val pages = PdfTextExtractor.extractPages(pdfFile)
@@ -922,15 +986,36 @@ object DocumentConverterEngine {
             sb.appendLine()
 
             if (pages.isEmpty()) {
-                sb.appendLine("No selectable text layer was detected in this PDF.")
+                val pdfBoxAll = if (context != null) extractAllPagesWithPdfBox(context, pdfFile) else emptyList()
+                if (pdfBoxAll.isNotEmpty()) {
+                    pdfBoxAll.forEachIndexed { idx, paras ->
+                        if (pdfBoxAll.size > 1) {
+                            sb.appendLine("--- Page ${idx + 1} ---")
+                            sb.appendLine()
+                        }
+                        paras.forEach { p ->
+                            sb.appendLine(p)
+                            sb.appendLine()
+                        }
+                    }
+                } else {
+                    sb.appendLine("No selectable text layer was detected in this PDF.")
+                }
             } else {
                 for (page in pages) {
                     if (pages.size > 1) {
                         sb.appendLine("--- Page ${page.pageNumber} ---")
                         sb.appendLine()
                     }
-                    if (page.paragraphs.isNotEmpty()) {
-                        for (para in page.paragraphs) {
+                    val paras = if (page.paragraphs.isNotEmpty()) {
+                        page.paragraphs
+                    } else if (context != null) {
+                        extractParagraphsWithPdfBox(context, pdfFile, page.pageNumber - 1)
+                    } else {
+                        emptyList()
+                    }
+                    if (paras.isNotEmpty()) {
+                        for (para in paras) {
                             sb.appendLine(para)
                             sb.appendLine()
                         }
@@ -946,6 +1031,50 @@ object DocumentConverterEngine {
         } catch (e: Exception) {
             Log.e(TAG, "Error converting PDF to TXT", e)
             false
+        }
+    }
+
+    private fun extractParagraphsWithPdfBox(context: Context, pdfFile: File, pageIndex: Int): List<String> {
+        return try {
+            PdfBoxInitializer.ensureInitialized(context)
+            com.tom_roush.pdfbox.pdmodel.PDDocument.load(pdfFile).use { doc ->
+                if (pageIndex !in 0 until doc.numberOfPages || doc.isEncrypted) return emptyList()
+                val stripper = com.tom_roush.pdfbox.text.PDFTextStripper().apply {
+                    sortByPosition = true
+                    startPage = pageIndex + 1
+                    endPage = pageIndex + 1
+                }
+                stripper.getText(doc)
+                    .replace("\r\n", "\n")
+                    .split(Regex("\n{2,}"))
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun extractAllPagesWithPdfBox(context: Context, pdfFile: File): List<List<String>> {
+        return try {
+            PdfBoxInitializer.ensureInitialized(context)
+            com.tom_roush.pdfbox.pdmodel.PDDocument.load(pdfFile).use { doc ->
+                if (doc.isEncrypted) return emptyList()
+                (0 until doc.numberOfPages).map { idx ->
+                    val stripper = com.tom_roush.pdfbox.text.PDFTextStripper().apply {
+                        sortByPosition = true
+                        startPage = idx + 1
+                        endPage = idx + 1
+                    }
+                    stripper.getText(doc)
+                        .replace("\r\n", "\n")
+                        .split(Regex("\n{2,}"))
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
