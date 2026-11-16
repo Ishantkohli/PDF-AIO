@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/adf-aio-banner.gif" alt="PDF (AIO) animated banner" width="100%">
+<img src="https://share.creavite.co/6afaeb45d7ebcdd466ab4285.gif" alt="PDF (AIO) animated banner" width="100%">
 
 # PDF (AIO) — v5.3.0
 
